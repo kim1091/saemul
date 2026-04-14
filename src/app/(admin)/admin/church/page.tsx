@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { QRCodeSVG } from "qrcode.react";
 import { createClient } from "@/lib/supabase";
 
 interface Church {
@@ -10,6 +11,7 @@ interface Church {
   address: string | null;
   phone: string | null;
   pastor_id: string;
+  invite_code: string | null;
 }
 
 interface WorshipType {
@@ -198,6 +200,46 @@ export default function ChurchSetupPage() {
             {church.address && <p className="text-sm text-mid-gray mt-1">{church.address}</p>}
             {church.phone && <p className="text-sm text-mid-gray">{church.phone}</p>}
           </div>
+
+          {/* 초대 코드 + QR */}
+          {church.invite_code && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+              <h3 className="font-bold text-charcoal mb-3">성도 초대</h3>
+              <p className="text-sm text-mid-gray mb-4">
+                아래 코드를 성도에게 공유하거나 QR 코드를 보여주세요.
+              </p>
+
+              <div className="bg-cream rounded-xl p-4 mb-4 text-center">
+                <p className="text-xs text-mid-gray mb-1">교회 코드</p>
+                <div className="flex items-center justify-center gap-2">
+                  <p className="text-3xl font-bold tracking-widest font-mono text-green-dark">
+                    {church.invite_code}
+                  </p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(church.invite_code!);
+                      alert("코드가 복사되었습니다!");
+                    }}
+                    className="px-2 py-1 bg-green text-white text-xs rounded-lg"
+                  >
+                    복사
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-green/20 rounded-xl p-4 flex flex-col items-center">
+                <p className="text-xs text-mid-gray mb-2">QR 코드로 바로 가입</p>
+                <QRCodeSVG
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/join/${church.invite_code}`}
+                  size={180}
+                  level="M"
+                />
+                <p className="text-xs text-mid-gray mt-3 text-center">
+                  성도가 카메라로 스캔하면 바로 가입 페이지로 이동합니다.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* 예배 유형 */}
           <div className="flex items-center justify-between mb-3">
