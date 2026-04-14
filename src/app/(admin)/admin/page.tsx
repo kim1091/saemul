@@ -12,6 +12,14 @@ const adminMenus = [
     color: "bg-[#3A5331]",
   },
   {
+    href: "/admin/requests",
+    icon: "✋",
+    title: "가입 요청",
+    desc: "성도 가입 요청 승인/거절",
+    stat: "확인 필요",
+    color: "bg-gold",
+  },
+  {
     href: "/admin/attendance",
     icon: "📋",
     title: "출석 관리",
