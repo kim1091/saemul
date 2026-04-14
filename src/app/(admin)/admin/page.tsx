@@ -4,6 +4,14 @@ import Link from "next/link";
 
 const adminMenus = [
   {
+    href: "/admin/church",
+    icon: "⛪",
+    title: "교회 설정",
+    desc: "교회 정보 + 예배 유형 관리",
+    stat: "시작하기",
+    color: "bg-[#3A5331]",
+  },
+  {
     href: "/admin/attendance",
     icon: "📋",
     title: "출석 관리",
