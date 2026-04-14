@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       sermonData = match ? JSON.parse(match[0]) : { title: reference, content: text };
     }
 
-    // DB 저장
+    // DB 저장 (설교공방 기존 컬럼 호환: passage/length/sermon_text)
     const { data: sermon, error } = await supabase
       .from("sermons")
       .insert({
@@ -121,6 +121,11 @@ export async function POST(request: Request) {
         duration_minutes: durationMinutes || 5,
         audience: audience || null,
         tone: tone || null,
+        // 설교공방 호환 컬럼 (NOT NULL 제약 있음)
+        passage: reference,
+        sermon_text: sermonData.content,
+        length: `${durationMinutes || 5}분`,
+        memo: "",
       })
       .select("id")
       .single();
