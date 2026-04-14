@@ -1,21 +1,129 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
+
+interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  invite_code: string;
+}
 
 export default function GroupPage() {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showJoin, setShowJoin] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupDesc, setNewGroupDesc] = useState("");
+  const [message, setMessage] = useState("");
 
-  // TODO: Supabase에서 내 소그룹 목록 불러오기
-  const groups: { id: string; name: string; member_count: number; description: string }[] = [];
+  const supabase = createClient();
 
-  function handleJoin() {
-    if (!inviteCode.trim()) return;
-    // TODO: Supabase에 참여 요청
-    alert(`초대코드 "${inviteCode}"로 참여 요청! (Supabase 연동 후 실제 동작)`);
-    setInviteCode("");
-    setShowJoin(false);
+  useEffect(() => {
+    loadGroups();
+  }, []);
+
+  async function loadGroups() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+
+    const { data: memberships } = await supabase
+      .from("group_members")
+      .select("group_id")
+      .eq("user_id", user.id);
+
+    if (memberships && memberships.length > 0) {
+      const groupIds = memberships.map((m) => m.group_id);
+      const { data } = await supabase
+        .from("groups")
+        .select("*")
+        .in("id", groupIds);
+      setGroups(data || []);
+    }
+    setLoading(false);
+  }
+
+  async function handleJoin() {
+    if (inviteCode.length < 4) return;
+    setMessage("");
+
+    const { data: group } = await supabase
+      .from("groups")
+      .select("id, name")
+      .eq("invite_code", inviteCode.toUpperCase())
+      .single();
+
+    if (!group) {
+      setMessage("유효하지 않은 초대코드입니다.");
+      return;
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from("group_members").insert({
+      group_id: group.id,
+      user_id: user.id,
+      role: "member",
+    });
+
+    if (error?.code === "23505") {
+      setMessage("이미 참여 중인 소그룹입니다.");
+    } else if (error) {
+      setMessage("참여에 실패했습니다.");
+    } else {
+      setInviteCode("");
+      setShowJoin(false);
+      setMessage("");
+      loadGroups();
+    }
+  }
+
+  async function handleCreate() {
+    if (!newGroupName.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    const { data: group, error } = await supabase
+      .from("groups")
+      .insert({
+        name: newGroupName,
+        description: newGroupDesc || null,
+        invite_code: code,
+        leader_id: user.id,
+      })
+      .select("id")
+      .single();
+
+    if (error || !group) {
+      setMessage("생성에 실패했습니다.");
+      return;
+    }
+
+    await supabase.from("group_members").insert({
+      group_id: group.id,
+      user_id: user.id,
+      role: "leader",
+    });
+
+    setNewGroupName("");
+    setNewGroupDesc("");
+    setShowCreate(false);
+    loadGroups();
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-mid-gray">불러오는 중...</p>
+      </div>
+    );
   }
 
   return (
@@ -24,21 +132,26 @@ export default function GroupPage() {
         <h1 className="text-xl font-bold text-green-dark">소그룹</h1>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowJoin(!showJoin)}
+            onClick={() => { setShowJoin(!showJoin); setShowCreate(false); }}
             className="px-3 py-2 border border-green text-green text-sm font-medium rounded-lg"
           >
             참여
           </button>
-          <Link
-            href="/group/create"
+          <button
+            onClick={() => { setShowCreate(!showCreate); setShowJoin(false); }}
             className="px-3 py-2 bg-green text-white text-sm font-medium rounded-lg"
           >
             + 만들기
-          </Link>
+          </button>
         </div>
       </div>
 
-      {/* 초대코드 입력 */}
+      {message && (
+        <div className="bg-cream-dark rounded-xl p-3 mb-4">
+          <p className="text-sm text-charcoal text-center">{message}</p>
+        </div>
+      )}
+
       {showJoin && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
           <h3 className="font-bold text-charcoal mb-3">초대코드로 참여</h3>
@@ -47,13 +160,13 @@ export default function GroupPage() {
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="6자리 초대코드 입력"
+              placeholder="초대코드 입력"
               maxLength={6}
               className="flex-1 px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-green"
             />
             <button
               onClick={handleJoin}
-              disabled={inviteCode.length < 6}
+              disabled={inviteCode.length < 4}
               className="px-5 py-2.5 bg-green text-white rounded-lg text-sm font-medium disabled:opacity-40"
             >
               참여
@@ -62,32 +175,53 @@ export default function GroupPage() {
         </div>
       )}
 
-      {/* 소그룹 목록 */}
+      {showCreate && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
+          <h3 className="font-bold text-charcoal">새 소그룹 만들기</h3>
+          <input
+            type="text"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            placeholder="소그룹 이름"
+            className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+          />
+          <input
+            type="text"
+            value={newGroupDesc}
+            onChange={(e) => setNewGroupDesc(e.target.value)}
+            placeholder="소그룹 설명 (선택)"
+            className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+          />
+          <button
+            onClick={handleCreate}
+            disabled={!newGroupName.trim()}
+            className="w-full py-2.5 bg-green text-white rounded-lg font-medium text-sm disabled:opacity-40"
+          >
+            소그룹 만들기
+          </button>
+        </div>
+      )}
+
       {groups.length === 0 ? (
         <div className="text-center pt-12">
           <p className="text-4xl mb-3">👥</p>
-          <h2 className="text-lg font-bold text-green-dark mb-2">
-            아직 소그룹이 없습니다
-          </h2>
-          <p className="text-mid-gray text-sm mb-2">
-            소그룹을 만들거나 초대코드로 참여하세요.
-          </p>
-          <p className="text-mid-gray text-xs">
-            함께 큐티하고 묵상을 나눌 수 있습니다.
-          </p>
+          <h2 className="text-lg font-bold text-green-dark mb-2">아직 소그룹이 없습니다</h2>
+          <p className="text-mid-gray text-sm">소그룹을 만들거나 초대코드로 참여하세요.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {groups.map((g) => (
             <Link key={g.id} href={`/group/${g.id}`}>
-              <div className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="bg-white rounded-xl p-4 shadow-sm mb-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-bold text-green-dark">{g.name}</h3>
-                    <p className="text-mid-gray text-sm mt-0.5">{g.description}</p>
+                    {g.description && (
+                      <p className="text-mid-gray text-sm mt-0.5">{g.description}</p>
+                    )}
                   </div>
                   <span className="text-xs text-mid-gray bg-cream-dark px-2 py-1 rounded-full">
-                    {g.member_count}명
+                    코드: {g.invite_code}
                   </span>
                 </div>
               </div>

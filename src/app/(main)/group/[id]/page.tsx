@@ -1,40 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { createClient } from "@/lib/supabase";
 
 interface Sharing {
   id: string;
-  user_name: string;
   content: string;
   created_at: string;
-  reactions: { amen: number; pray: number; love: number };
+  user_id: string;
+  profiles?: { display_name: string };
 }
 
 export default function GroupDetailPage() {
-  const [newSharing, setNewSharing] = useState("");
-  const [sharings] = useState<Sharing[]>([
-    {
-      id: "demo-1",
-      user_name: "김성도",
-      content: "오늘 본문을 통해 하나님의 사랑이 조건 없는 것임을 다시 깨달았습니다. 나도 주변 사람들에게 조건 없이 사랑을 베풀어야겠다고 결단합니다.",
-      created_at: new Date().toISOString(),
-      reactions: { amen: 3, pray: 1, love: 2 },
-    },
-    {
-      id: "demo-2",
-      user_name: "이집사",
-      content: "심령이 가난한 자에 대해 묵상하며, 내가 스스로 의로운 척하고 있지는 않았는지 돌아보게 됩니다. 겸손한 하루가 되길 기도합니다.",
-      created_at: new Date(Date.now() - 3600000).toISOString(),
-      reactions: { amen: 5, pray: 2, love: 1 },
-    },
-  ]);
+  const params = useParams();
+  const groupId = params.id as string;
+  const supabase = createClient();
 
-  function handlePost() {
-    if (!newSharing.trim()) return;
-    // TODO: Supabase에 나눔 저장 + Realtime
-    alert("나눔이 공유되었습니다! (Supabase 연동 후 실제 동작)");
-    setNewSharing("");
+  const [group, setGroup] = useState<{ name: string; invite_code: string } | null>(null);
+  const [sharings, setSharings] = useState<Sharing[]>([]);
+  const [newSharing, setNewSharing] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [posting, setPosting] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, [groupId]);
+
+  async function loadData() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) setUserId(user.id);
+
+    // 그룹 정보
+    const { data: g } = await supabase
+      .from("groups")
+      .select("name, invite_code")
+      .eq("id", groupId)
+      .single();
+    setGroup(g);
+
+    // 나눔 목록
+    await loadSharings();
+    setLoading(false);
+  }
+
+  async function loadSharings() {
+    const { data } = await supabase
+      .from("group_sharings")
+      .select("id, content, created_at, user_id")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    setSharings(data || []);
+  }
+
+  async function handlePost() {
+    if (!newSharing.trim() || !userId) return;
+    setPosting(true);
+
+    const { error } = await supabase.from("group_sharings").insert({
+      group_id: groupId,
+      user_id: userId,
+      content: newSharing.trim(),
+    });
+
+    if (!error) {
+      setNewSharing("");
+      loadSharings();
+    }
+    setPosting(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-mid-gray">불러오는 중...</p>
+      </div>
+    );
+  }
+
+  if (!group) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] px-6">
+        <div className="text-center">
+          <p className="text-4xl mb-3">❌</p>
+          <h2 className="text-lg font-bold text-green-dark mb-2">소그룹을 찾을 수 없습니다</h2>
+          <Link href="/group" className="text-green font-medium text-sm">목록으로 →</Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -43,56 +99,42 @@ export default function GroupDetailPage() {
       <div className="px-5 pt-4 pb-3 border-b border-light-gray bg-cream">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-green-dark">은혜 소그룹</h1>
-            <p className="text-xs text-mid-gray">멤버 8명</p>
+            <h1 className="text-lg font-bold text-green-dark">{group.name}</h1>
+            <p className="text-xs text-mid-gray">초대코드: {group.invite_code}</p>
           </div>
-          <Link href="/group" className="text-sm text-mid-gray">
-            ← 목록
-          </Link>
-        </div>
-
-        {/* 오늘의 본문 */}
-        <div className="mt-3 bg-green-dark/5 rounded-lg px-3 py-2">
-          <p className="text-xs text-gold font-medium">오늘의 본문</p>
-          <p className="text-sm text-green-dark font-bold">마태복음 5:1-12</p>
+          <Link href="/group" className="text-sm text-mid-gray">← 목록</Link>
         </div>
       </div>
 
       {/* 나눔 피드 */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        {sharings.map((s) => (
-          <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-green text-white flex items-center justify-center text-xs font-bold">
-                {s.user_name[0]}
-              </div>
-              <div>
-                <p className="font-bold text-charcoal text-sm">{s.user_name}</p>
-                <p className="text-xs text-mid-gray">
-                  {new Date(s.created_at).toLocaleTimeString("ko-KR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-charcoal text-sm leading-6 mb-3">{s.content}</p>
-
-            {/* 반응 */}
-            <div className="flex gap-2">
-              <button className="flex items-center gap-1 px-3 py-1 bg-cream rounded-full text-xs text-charcoal hover:bg-cream-dark transition">
-                🙏 아멘 <span className="text-mid-gray">{s.reactions.amen}</span>
-              </button>
-              <button className="flex items-center gap-1 px-3 py-1 bg-cream rounded-full text-xs text-charcoal hover:bg-cream-dark transition">
-                ❤️ 은혜 <span className="text-mid-gray">{s.reactions.love}</span>
-              </button>
-              <button className="flex items-center gap-1 px-3 py-1 bg-cream rounded-full text-xs text-charcoal hover:bg-cream-dark transition">
-                🤲 기도 <span className="text-mid-gray">{s.reactions.pray}</span>
-              </button>
-            </div>
+        {sharings.length === 0 ? (
+          <div className="text-center pt-8">
+            <p className="text-3xl mb-2">💬</p>
+            <p className="text-mid-gray text-sm">아직 나눔이 없습니다. 첫 묵상을 나눠보세요!</p>
           </div>
-        ))}
+        ) : (
+          sharings.map((s) => (
+            <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-full bg-green text-white flex items-center justify-center text-xs font-bold">
+                  {s.user_id === userId ? "나" : "?"}
+                </div>
+                <div>
+                  <p className="font-bold text-charcoal text-sm">
+                    {s.user_id === userId ? "나" : "멤버"}
+                  </p>
+                  <p className="text-xs text-mid-gray">
+                    {new Date(s.created_at).toLocaleString("ko-KR", {
+                      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+              </div>
+              <p className="text-charcoal text-sm leading-6 whitespace-pre-line">{s.content}</p>
+            </div>
+          ))
+        )}
       </div>
 
       {/* 나눔 입력 */}
@@ -107,10 +149,10 @@ export default function GroupDetailPage() {
           />
           <button
             onClick={handlePost}
-            disabled={!newSharing.trim()}
+            disabled={!newSharing.trim() || posting}
             className="self-end px-4 py-2 bg-green text-white rounded-xl text-sm font-medium disabled:opacity-40"
           >
-            나눔
+            {posting ? "..." : "나눔"}
           </button>
         </div>
       </div>
