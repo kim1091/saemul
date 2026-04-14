@@ -1,0 +1,28 @@
+{
+  "name": "샘물 — 교회 종합 플랫폼",
+  "short_name": "샘물",
+  "description": "AI 기반 신앙생활 + 교회운영 올인원",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#FEFDF8",
+  "theme_color": "#4A6741",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
