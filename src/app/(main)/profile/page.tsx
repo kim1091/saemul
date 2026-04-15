@@ -9,7 +9,7 @@ type Role = "member" | "pastor" | "admin";
 type Tier = "free" | "premium" | "pastor" | "church";
 
 interface Profile {
-  display_name: string;
+  name: string | null;
   role: Role;
   subscription_tier: Tier;
   qt_streak: number;
@@ -36,7 +36,7 @@ export default function ProfilePage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("display_name, role, subscription_tier, qt_streak, qt_total_days, church_name")
+      .select("name, role, subscription_tier, qt_streak, qt_total_days, church_name")
       .eq("id", user.id)
       .single();
 
@@ -71,7 +71,7 @@ export default function ProfilePage() {
   }
 
   const tier = tierLabels[profile.subscription_tier];
-  const displayName = profile.display_name || email.split("@")[0] || "사용자";
+  const displayName = profile.name || email.split("@")[0] || "사용자";
 
   return (
     <div className="px-5 pt-6">

@@ -36,13 +36,12 @@ export default function HomePage() {
     if (user) {
       const { data } = await supabase
         .from("profiles")
-        .select("display_name, church_name")
+        .select("name, church_name")
         .eq("id", user.id)
         .single();
-      if (data) {
-        setDisplayName(data.display_name || user.email?.split("@")[0] || "사용자");
-        setChurchName(data.church_name);
-      }
+      const n = data?.name || user.email?.split("@")[0] || "사용자";
+      setDisplayName(n);
+      setChurchName(data?.church_name || null);
     }
 
     // 오늘의 큐티
