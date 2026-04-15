@@ -1,12 +1,59 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
+
+interface TodayQt {
+  book: string;
+  chapter: number;
+  verse_start: number;
+  verse_end: number;
+  commentary?: { key_message?: string };
+}
 
 export default function HomePage() {
+  const [displayName, setDisplayName] = useState("");
+  const [churchName, setChurchName] = useState<string | null>(null);
+  const [todayQt, setTodayQt] = useState<TodayQt | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const supabase = createClient();
+
   const today = new Date().toLocaleDateString("ko-KR", {
     year: "numeric",
     month: "long",
     day: "numeric",
     weekday: "long",
   });
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name, church_name")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        setDisplayName(data.display_name || user.email?.split("@")[0] || "사용자");
+        setChurchName(data.church_name);
+      }
+    }
+
+    // 오늘의 큐티
+    const res = await fetch("/api/qt/today");
+    if (res.ok) {
+      const qt = await res.json();
+      setTodayQt(qt);
+    }
+
+    setLoading(false);
+  }
 
   return (
     <div className="px-5 pt-6">
@@ -15,21 +62,57 @@ export default function HomePage() {
         <div>
           <h1 className="text-2xl font-bold text-green-dark">샘물</h1>
           <p className="text-mid-gray text-sm mt-0.5">{today}</p>
+          {churchName && (
+            <p className="text-xs text-gold mt-1">⛪ {churchName}</p>
+          )}
         </div>
         <Link
           href="/profile"
-          className="w-10 h-10 rounded-full bg-green-dark text-white flex items-center justify-center text-lg"
+          className="w-10 h-10 rounded-full bg-green-dark text-white flex items-center justify-center text-lg font-bold"
         >
-          ?
+          {displayName ? displayName[0].toUpperCase() : "?"}
         </Link>
       </div>
+
+      {/* 교회 가입 안내 (소속 없을 때만) */}
+      {!loading && !churchName && (
+        <Link href="/join" className="block">
+          <div className="bg-gold/10 border border-gold/30 rounded-xl p-4 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">⛪</span>
+              <div className="flex-1">
+                <p className="font-bold text-gold text-sm">교회에 가입하세요</p>
+                <p className="text-charcoal text-xs mt-0.5">
+                  교회 이름 검색 또는 초대 코드로 쉽게 가입
+                </p>
+              </div>
+              <span className="text-gold">→</span>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* 오늘의 큐티 카드 */}
       <Link href="/qt" className="block">
         <div className="bg-green-dark text-white rounded-2xl p-6 mb-4 shadow-md">
           <p className="text-gold text-xs tracking-wider mb-2">오늘의 큐티</p>
-          <h2 className="text-xl font-bold mb-1">마태복음 5:1-12</h2>
-          <p className="text-light-gray text-sm mb-4">팔복 - 참된 행복의 길</p>
+          {todayQt ? (
+            <>
+              <h2 className="text-xl font-bold mb-1">
+                {todayQt.book} {todayQt.chapter}:{todayQt.verse_start}-{todayQt.verse_end}
+              </h2>
+              <p className="text-light-gray text-sm mb-4 line-clamp-2">
+                {todayQt.commentary?.key_message || "오늘의 묵상을 시작하세요"}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold mb-1">오늘의 말씀</h2>
+              <p className="text-light-gray text-sm mb-4">
+                AI가 준비한 큐티를 묵상해보세요
+              </p>
+            </>
+          )}
           <span className="inline-block bg-gold text-charcoal text-sm font-bold px-4 py-2 rounded-lg">
             큐티하러 가기
           </span>
