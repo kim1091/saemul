@@ -6,9 +6,16 @@ import { createClient } from "@/lib/supabase";
 
 const OFFERING_TYPES = [
   { value: "tithe", label: "십일조" },
+  { value: "sunday", label: "주일헌금" },
   { value: "thanksgiving", label: "감사헌금" },
   { value: "mission", label: "선교헌금" },
   { value: "building", label: "건축헌금" },
+  { value: "easter", label: "부활절감사헌금" },
+  { value: "maechu", label: "맥추감사헌금" },
+  { value: "harvest", label: "추수감사헌금" },
+  { value: "christmas", label: "성탄감사헌금" },
+  { value: "purpose", label: "목적헌금 (이름 입력)" },
+  { value: "district", label: "구역헌금" },
   { value: "special", label: "특별헌금" },
   { value: "other", label: "기타" },
 ];
@@ -19,6 +26,7 @@ interface Offering {
   offering_date: string;
   amount: number;
   offering_type: string;
+  custom_name: string | null;
   memo: string | null;
 }
 
@@ -40,9 +48,9 @@ export default function FinancePage() {
   // 헌금 폼
   const [showOfferingForm, setShowOfferingForm] = useState(false);
   const [offeringData, setOfferingData] = useState({
-    amount: "", type: "tithe",
+    amount: "", type: "tithe", custom_name: "",
     date: new Date().toISOString().split("T")[0],
-    memo: "",
+    memo: "", offerer_name: "",
   });
 
   // 지출 폼
@@ -83,16 +91,21 @@ export default function FinancePage() {
 
   async function handleSaveOffering() {
     if (!offeringData.amount || !churchId || !pastorId) return;
+    if (offeringData.type === "purpose" && !offeringData.custom_name.trim()) {
+      alert("목적헌금의 이름을 입력해주세요 (예: 건축, 장학)");
+      return;
+    }
     const { error } = await supabase.from("offerings").insert({
       church_id: churchId,
       offering_date: offeringData.date,
       amount: parseInt(offeringData.amount),
       offering_type: offeringData.type,
-      memo: offeringData.memo || null,
+      custom_name: offeringData.type === "purpose" ? offeringData.custom_name.trim() : null,
+      memo: [offeringData.offerer_name, offeringData.memo].filter(Boolean).join(" | ") || null,
       recorded_by: pastorId,
     });
     if (error) { alert("저장 실패: " + error.message); return; }
-    setOfferingData({ amount: "", type: "tithe", date: new Date().toISOString().split("T")[0], memo: "" });
+    setOfferingData({ amount: "", type: "tithe", custom_name: "", date: new Date().toISOString().split("T")[0], memo: "", offerer_name: "" });
     setShowOfferingForm(false);
     loadData();
   }
@@ -177,6 +190,23 @@ export default function FinancePage() {
 
           {showOfferingForm && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
+              <select
+                value={offeringData.type}
+                onChange={(e) => setOfferingData({ ...offeringData, type: e.target.value })}
+                className="w-full px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+              >
+                {OFFERING_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+
+              {offeringData.type === "purpose" && (
+                <input
+                  type="text" placeholder="목적헌금 이름 * (예: 장학, 구제, 선교지원)"
+                  value={offeringData.custom_name}
+                  onChange={(e) => setOfferingData({ ...offeringData, custom_name: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-gold/10 border border-gold/30 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gold"
+                />
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="number" placeholder="금액 *"
@@ -184,21 +214,21 @@ export default function FinancePage() {
                   onChange={(e) => setOfferingData({ ...offeringData, amount: e.target.value })}
                   className="flex-1 px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
                 />
-                <select
-                  value={offeringData.type}
-                  onChange={(e) => setOfferingData({ ...offeringData, type: e.target.value })}
+                <input
+                  type="date" value={offeringData.date}
+                  onChange={(e) => setOfferingData({ ...offeringData, date: e.target.value })}
                   className="px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
-                >
-                  {OFFERING_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                />
               </div>
+
               <input
-                type="date" value={offeringData.date}
-                onChange={(e) => setOfferingData({ ...offeringData, date: e.target.value })}
+                type="text" placeholder="성도 이름 (선택, 익명이면 비워두기)"
+                value={offeringData.offerer_name}
+                onChange={(e) => setOfferingData({ ...offeringData, offerer_name: e.target.value })}
                 className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
               />
               <input
-                type="text" placeholder="메모 (익명 시 비워두세요)"
+                type="text" placeholder="메모 (선택)"
                 value={offeringData.memo}
                 onChange={(e) => setOfferingData({ ...offeringData, memo: e.target.value })}
                 className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
@@ -217,7 +247,9 @@ export default function FinancePage() {
                 <div key={o.id} className={`flex justify-between py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
                   <div>
                     <p className="text-sm font-medium text-charcoal">
-                      {OFFERING_TYPES.find((t) => t.value === o.offering_type)?.label}
+                      {o.offering_type === "purpose" && o.custom_name
+                        ? `목적 · ${o.custom_name}`
+                        : OFFERING_TYPES.find((t) => t.value === o.offering_type)?.label}
                     </p>
                     <p className="text-xs text-mid-gray">{o.offering_date}{o.memo && ` | ${o.memo}`}</p>
                   </div>
