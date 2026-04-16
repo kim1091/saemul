@@ -71,7 +71,7 @@ export default function AttendancePage() {
     // 같은 교회 성도들
     const { data: profs } = await supabase
       .from("profiles")
-      .select("id, display_name")
+      .select("id, name, email")
       .eq("church_id", churchId);
 
     // 해당 예배 출석 기록
@@ -87,7 +87,7 @@ export default function AttendancePage() {
     setMembers(
       (profs || []).map((p) => ({
         id: p.id,
-        display_name: p.display_name || "이름 없음",
+        display_name: p.name || p.email?.split("@")[0] || "이름 없음",
         checked: checkedIds.has(p.id),
       }))
     );

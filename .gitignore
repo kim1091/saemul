@@ -40,3 +40,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .env.local
+
+# 텔레그램 봇 비밀
+.env.bot
+.saemul_bot.db
+*.bak

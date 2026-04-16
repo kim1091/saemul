@@ -10,7 +10,7 @@ interface Sharing {
   content: string;
   created_at: string;
   user_id: string;
-  profiles?: { display_name: string };
+  user_name?: string;
 }
 
 export default function GroupDetailPage() {
@@ -53,7 +53,22 @@ export default function GroupDetailPage() {
       .eq("group_id", groupId)
       .order("created_at", { ascending: false })
       .limit(50);
-    setSharings(data || []);
+
+    const list = data || [];
+    // 작성자 이름 조회
+    const userIds = Array.from(new Set(list.map((s) => s.user_id)));
+    const nameMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, email")
+        .in("id", userIds);
+      (profs || []).forEach((p: { id: string; name?: string; email?: string }) => {
+        nameMap[p.id] = p.name || p.email?.split("@")[0] || "멤버";
+      });
+    }
+
+    setSharings(list.map((s) => ({ ...s, user_name: nameMap[s.user_id] })));
   }
 
   async function handlePost() {
@@ -114,15 +129,18 @@ export default function GroupDetailPage() {
             <p className="text-mid-gray text-sm">아직 나눔이 없습니다. 첫 묵상을 나눠보세요!</p>
           </div>
         ) : (
-          sharings.map((s) => (
+          sharings.map((s) => {
+            const displayName = s.user_id === userId ? "나" : (s.user_name || "멤버");
+            const initial = (s.user_name || (s.user_id === userId ? "나" : "?"))[0];
+            return (
             <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-8 h-8 rounded-full bg-green text-white flex items-center justify-center text-xs font-bold">
-                  {s.user_id === userId ? "나" : "?"}
+                  {initial}
                 </div>
                 <div>
                   <p className="font-bold text-charcoal text-sm">
-                    {s.user_id === userId ? "나" : "멤버"}
+                    {displayName}
                   </p>
                   <p className="text-xs text-mid-gray">
                     {new Date(s.created_at).toLocaleString("ko-KR", {
@@ -133,7 +151,8 @@ export default function GroupDetailPage() {
               </div>
               <p className="text-charcoal text-sm leading-6 whitespace-pre-line">{s.content}</p>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
