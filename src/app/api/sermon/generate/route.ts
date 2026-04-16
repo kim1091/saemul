@@ -97,7 +97,13 @@ export async function POST(request: Request) {
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
+    const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
+    if (!text) {
+      return NextResponse.json(
+        { error: "빈 응답을 받았습니다. 다시 시도해주세요." },
+        { status: 502 }
+      );
+    }
 
     let sermonData;
     try {

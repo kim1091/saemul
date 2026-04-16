@@ -25,33 +25,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     }
 
-    // 일일 질문 횟수 체크
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("daily_ask_count, daily_ask_reset_at, subscription_tier")
-      .eq("id", user.id)
-      .single();
-
-    if (profile) {
-      const today = new Date().toISOString().split("T")[0];
-
-      if (profile.daily_ask_reset_at !== today) {
-        // 날짜가 바뀌었으면 카운트 리셋
-        await supabase
-          .from("profiles")
-          .update({ daily_ask_count: 0, daily_ask_reset_at: today })
-          .eq("id", user.id);
-      } else if (
-        profile.subscription_tier === "free" &&
-        profile.daily_ask_count >= 3
-      ) {
-        return NextResponse.json(
-          { error: "오늘의 무료 질문 횟수(3회)를 모두 사용했습니다." },
-          { status: 429 }
-        );
-      }
-    }
-
     const body = await request.json();
     const { message, conversationId } = body as {
       message: string;
@@ -60,6 +33,34 @@ export async function POST(request: Request) {
 
     if (!message || message.trim().length === 0) {
       return NextResponse.json({ error: "질문을 입력해주세요." }, { status: 400 });
+    }
+
+    // 원자적 쿼터 체크+증가 (RPC: SELECT FOR UPDATE로 레이스 방지)
+    // AI 호출 전에 슬롯 예약 — 실패 시에도 1회 소진 (일일 리셋이라 합리적)
+    const { data: quota, error: quotaErr } = await supabase.rpc(
+      "try_use_daily_ask",
+      { p_user_id: user.id }
+    );
+
+    if (quotaErr) {
+      console.error("try_use_daily_ask RPC error:", quotaErr);
+      return NextResponse.json(
+        { error: "질문 횟수 확인에 실패했습니다." },
+        { status: 500 }
+      );
+    }
+
+    if (!quota?.allowed) {
+      if (quota?.error === "limit_exceeded") {
+        return NextResponse.json(
+          { error: "오늘의 무료 질문 횟수(3회)를 모두 사용했습니다." },
+          { status: 429 }
+        );
+      }
+      return NextResponse.json(
+        { error: "질문 권한을 확인할 수 없습니다." },
+        { status: 403 }
+      );
     }
 
     // 대화 생성 또는 기존 대화 사용
@@ -106,7 +107,14 @@ export async function POST(request: Request) {
     });
 
     const assistantMessage =
-      response.content[0].type === "text" ? response.content[0].text : "";
+      response.content?.[0]?.type === "text" ? response.content[0].text : "";
+
+    if (!assistantMessage) {
+      return NextResponse.json(
+        { error: "빈 응답을 받았습니다. 다시 시도해주세요." },
+        { status: 502 }
+      );
+    }
 
     // AI 응답 저장
     await supabase.from("ask_messages").insert({
@@ -115,15 +123,12 @@ export async function POST(request: Request) {
       content: assistantMessage,
     });
 
-    // 질문 횟수 증가
-    await supabase
-      .from("profiles")
-      .update({ daily_ask_count: (profile?.daily_ask_count || 0) + 1 })
-      .eq("id", user.id);
+    // 카운트는 이미 RPC에서 원자적으로 증가됨 — 여기선 추가 작업 없음
 
     return NextResponse.json({
       conversationId: convId,
       message: assistantMessage,
+      dailyCount: quota.count,
     });
   } catch (error) {
     console.error("Ask API error:", error);
