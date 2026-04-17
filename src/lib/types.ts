@@ -17,6 +17,7 @@ export interface Profile {
   church_id: string | null;
   church_name: string | null;
   phone: string | null;
+  onboarded: boolean;
   created_at: string;
   updated_at: string;
 }

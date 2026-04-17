@@ -2,7 +2,40 @@
 
 import { createClient } from "@/lib/supabase";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+
+const ERROR_KO: Record<string, string> = {
+  "Invalid login credentials": "이메일 또는 비밀번호가 올바르지 않습니다.",
+  "Email not confirmed": "이메일 인증이 완료되지 않았습니다. 메일함을 확인해주세요.",
+  "User already registered": "이미 가입된 이메일입니다. 로그인해주세요.",
+  "Password should be at least 6 characters": "비밀번호는 6자 이상이어야 합니다.",
+  "Signup requires a valid password": "유효한 비밀번호를 입력해주세요.",
+  "Email rate limit exceeded": "너무 많은 시도입니다. 잠시 후 다시 시도해주세요.",
+  "For security purposes, you can only request this after": "보안을 위해 잠시 후 다시 시도해주세요.",
+};
+
+function toKorean(msg: string): string {
+  for (const [en, ko] of Object.entries(ERROR_KO)) {
+    if (msg.includes(en)) return ko;
+  }
+  return "오류가 발생했습니다. 다시 시도해주세요.";
+}
+
+function SessionExpiredBanner() {
+  const searchParams = useSearchParams();
+  if (searchParams.get("reason") !== "session-expired") return null;
+  return (
+    <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 text-center">
+      <p className="text-sm text-charcoal font-medium">
+        로그인 세션이 만료되었습니다
+      </p>
+      <p className="text-xs text-mid-gray mt-1">
+        다시 로그인해주세요
+      </p>
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -34,11 +67,11 @@ export default function LoginPage() {
 
     if (isSignUp) {
       const { error } = await supabase.auth.signUp({ email, password });
-      if (error) setMessage(error.message);
+      if (error) setMessage(toKorean(error.message));
       else window.location.href = "/onboarding";
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMessage(error.message);
+      if (error) setMessage(toKorean(error.message));
       else window.location.href = "/home";
     }
     setLoading(false);
@@ -52,6 +85,10 @@ export default function LoginPage() {
       </Link>
 
       <div className="w-full max-w-sm space-y-4">
+        <Suspense>
+          <SessionExpiredBanner />
+        </Suspense>
+
         {/* Email Login */}
         <form onSubmit={handleEmailAuth} className="space-y-3">
           <input
@@ -81,13 +118,13 @@ export default function LoginPage() {
         </form>
 
         {message && (
-          <p className="text-sm text-center text-mid-gray bg-cream-dark rounded-lg p-3">
-            {message}
-          </p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+            <p className="text-sm text-red-700">{message}</p>
+          </div>
         )}
 
         <button
-          onClick={() => setIsSignUp(!isSignUp)}
+          onClick={() => { setIsSignUp(!isSignUp); setMessage(""); }}
           className="w-full text-center text-sm text-mid-gray hover:text-green-dark transition"
         >
           {isSignUp ? "이미 계정이 있으신가요? 로그인" : "계정이 없으신가요? 회원가입"}

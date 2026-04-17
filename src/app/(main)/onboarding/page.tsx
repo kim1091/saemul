@@ -121,7 +121,12 @@ export default function OnboardingPage() {
     setMessage("");
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setLoading(false); return; }
+    if (!user) {
+      setMessage("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+      setLoading(false);
+      setTimeout(() => router.push("/login?reason=session-expired"), 1500);
+      return;
+    }
 
     const profilePayload: Record<string, unknown> = {
       name, phone: phone || null, birth_date: birthDate || null, gender: gender || null,
@@ -161,12 +166,23 @@ export default function OnboardingPage() {
         await supabase.from("worship_types").insert({ ...w, church_id: church.id });
       }
 
-      await supabase.from("profiles").update(profilePayload).eq("id", user.id);
+      const { error: profErr } = await supabase.from("profiles").update(profilePayload).eq("id", user.id);
+      if (profErr) {
+        setMessage("프로필 저장에 실패했습니다. 다시 시도해주세요.");
+        setLoading(false);
+        return;
+      }
       router.push("/admin");
     } else {
-      // 성도 — 가입 신청
-      await supabase.from("profiles").update(profilePayload).eq("id", user.id);
+      // 성도 — 프로필 저장
+      const { error: profErr } = await supabase.from("profiles").update(profilePayload).eq("id", user.id);
+      if (profErr) {
+        setMessage("프로필 저장에 실패했습니다. 다시 시도해주세요.");
+        setLoading(false);
+        return;
+      }
 
+      // 가입 신청
       const snapshot = { name, phone, rank, services, baptism_date: baptismDate, registration_date: registrationDate };
 
       const { error: jrErr } = await supabase.from("join_requests").insert({
@@ -179,7 +195,7 @@ export default function OnboardingPage() {
       if (jrErr?.code === "23505") {
         setMessage(`이미 "${selectedChurchName}"에 가입 요청을 보냈습니다.`);
       } else if (jrErr) {
-        setMessage("신청 실패: " + jrErr.message);
+        setMessage("교회 가입 신청에 실패했습니다: " + jrErr.message);
         setLoading(false);
         return;
       } else {

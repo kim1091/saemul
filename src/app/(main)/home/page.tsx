@@ -33,29 +33,36 @@ export default function HomePage() {
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("name, church_name, onboarded")
-        .eq("id", user.id)
-        .single();
-
-      // 온보딩 미완료면 온보딩으로 이동
-      if (data && !data.onboarded) {
-        window.location.href = "/onboarding";
-        return;
-      }
-
-      const n = data?.name || user.email?.split("@")[0] || "사용자";
-      setDisplayName(n);
-      setChurchName(data?.church_name || null);
+    if (!user) {
+      window.location.href = "/login";
+      return;
     }
 
+    const { data } = await supabase
+      .from("profiles")
+      .select("name, church_name, onboarded")
+      .eq("id", user.id)
+      .single();
+
+    // 온보딩 미완료 — proxy.ts가 1차 가드, 여기는 2차 폴백
+    if (data && !data.onboarded) {
+      window.location.href = "/onboarding";
+      return;
+    }
+
+    const n = data?.name || user.email?.split("@")[0] || "사용자";
+    setDisplayName(n);
+    setChurchName(data?.church_name || null);
+
     // 오늘의 큐티
-    const res = await fetch("/api/qt/today");
-    if (res.ok) {
-      const qt = await res.json();
-      setTodayQt(qt);
+    try {
+      const res = await fetch("/api/qt/today");
+      if (res.ok) {
+        const qt = await res.json();
+        setTodayQt(qt);
+      }
+    } catch {
+      // QT 로드 실패 — 기본 UI 표시
     }
 
     setLoading(false);
