@@ -107,20 +107,22 @@ export default function GroupPage() {
 
     if (insertErr) {
       console.error("Group create error:", insertErr);
-      if (insertErr.code === "23505") {
-        setMessage("초대코드 충돌, 다시 시도해주세요.");
-      } else {
-        setMessage("생성에 실패했습니다: " + (insertErr.message || ""));
-      }
+      setMessage("[그룹 생성] " + insertErr.message + " (code:" + (insertErr.code || "") + ")");
       return;
     }
 
     // 리더를 멤버로 등록
-    await supabase.from("group_members").insert({
+    const { error: memberErr } = await supabase.from("group_members").insert({
       group_id: groupId,
       user_id: user.id,
       role: "leader",
     });
+
+    if (memberErr) {
+      console.error("Member insert error:", memberErr);
+      setMessage("[멤버 등록] " + memberErr.message + " (code:" + (memberErr.code || "") + ")");
+      return;
+    }
 
     setNewGroupName("");
     setNewGroupDesc("");
