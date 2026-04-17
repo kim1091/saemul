@@ -90,24 +90,43 @@ export default function GroupPage() {
 
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    const { data: group, error } = await supabase
+    // 1) 그룹 생성 (SELECT RLS 이슈 방지: .select() 없이 insert)
+    const { error: insertErr } = await supabase
       .from("groups")
       .insert({
         name: newGroupName,
         description: newGroupDesc || null,
         invite_code: code,
         leader_id: user.id,
-      })
-      .select("id")
-      .single();
+      });
 
-    if (error || !group) {
-      setMessage("생성에 실패했습니다.");
+    if (insertErr) {
+      console.error("Group create error:", insertErr);
+      if (insertErr.code === "23505") {
+        // invite_code 중복 → 재시도
+        setMessage("초대코드 충돌, 다시 시도해주세요.");
+      } else {
+        setMessage("생성에 실패했습니다: " + (insertErr.message || ""));
+      }
       return;
     }
 
+    // 2) 방금 만든 그룹 ID 조회 (leader_id로 검색 — RLS가 leader 조회 허용)
+    const { data: created } = await supabase
+      .from("groups")
+      .select("id")
+      .eq("invite_code", code)
+      .single();
+
+    if (!created) {
+      setMessage("그룹은 생성되었으나 ID 조회에 실패했습니다. 목록을 새로고침 해주세요.");
+      loadGroups();
+      return;
+    }
+
+    // 3) 리더를 멤버로 등록
     await supabase.from("group_members").insert({
-      group_id: group.id,
+      group_id: created.id,
       user_id: user.id,
       role: "leader",
     });
