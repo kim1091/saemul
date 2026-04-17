@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
 interface Group {
@@ -22,6 +23,7 @@ export default function GroupPage() {
   const [message, setMessage] = useState("");
 
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     loadGroups();
@@ -90,10 +92,13 @@ export default function GroupPage() {
 
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-    // 1) 그룹 생성 (SELECT RLS 이슈 방지: .select() 없이 insert)
+    // UUID를 클라이언트에서 미리 생성 → SELECT 불필요 (RLS 차단 회피)
+    const groupId = crypto.randomUUID();
+
     const { error: insertErr } = await supabase
       .from("groups")
       .insert({
+        id: groupId,
         name: newGroupName,
         description: newGroupDesc || null,
         invite_code: code,
@@ -103,7 +108,6 @@ export default function GroupPage() {
     if (insertErr) {
       console.error("Group create error:", insertErr);
       if (insertErr.code === "23505") {
-        // invite_code 중복 → 재시도
         setMessage("초대코드 충돌, 다시 시도해주세요.");
       } else {
         setMessage("생성에 실패했습니다: " + (insertErr.message || ""));
@@ -111,22 +115,9 @@ export default function GroupPage() {
       return;
     }
 
-    // 2) 방금 만든 그룹 ID 조회 (leader_id로 검색 — RLS가 leader 조회 허용)
-    const { data: created } = await supabase
-      .from("groups")
-      .select("id")
-      .eq("invite_code", code)
-      .single();
-
-    if (!created) {
-      setMessage("그룹은 생성되었으나 ID 조회에 실패했습니다. 목록을 새로고침 해주세요.");
-      loadGroups();
-      return;
-    }
-
-    // 3) 리더를 멤버로 등록
+    // 리더를 멤버로 등록
     await supabase.from("group_members").insert({
-      group_id: created.id,
+      group_id: groupId,
       user_id: user.id,
       role: "leader",
     });
@@ -134,7 +125,8 @@ export default function GroupPage() {
     setNewGroupName("");
     setNewGroupDesc("");
     setShowCreate(false);
-    loadGroups();
+    // 생성 후 바로 해당 소그룹으로 이동
+    router.push(`/group/${groupId}`);
   }
 
   if (loading) {
