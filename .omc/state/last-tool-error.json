@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd \\\"/Users/gimdaehui/Desktop/클로드 모음/saemul/\\\" && git stash && git pull --rebase origin main && git stash pop && git push origin main\",\"description\":\"Stash unstaged, pull rebase, pop, push...",
+  "error": "Exit code 1\nSaved working directory and index state WIP on main: f733363 fix: API 보안 강화 — 인증 우회 차단 + 쿼터 원자성 확보\nFrom https://github.com/kim1091/saemul\n * branch            main       -> FETCH_HEAD\n   b32dc7e..27f4e4a  main       -> origin/main\nRebasing (1/1)\rSuccessfully rebased and updated refs/heads/main.\nCONFLICT (modify/delete): .omc/state/idle-notif-cooldown.json deleted in Updated upstream and modified in Stashed changes.  Version Stashed changes of .omc/state/idle-notif-cooldown.json left ...",
+  "timestamp": "2026-04-16T23:53:25.474Z",
+  "retry_count": 3
+}
