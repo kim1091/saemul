@@ -85,7 +85,7 @@ export default function SermonDetailPage() {
       .from("sermon_analyses")
       .select("id, scores, feedback")
       .eq("sermon_id", sermonId)
-      .single();
+      .maybeSingle();
 
     if (a) {
       let parsed = { feedback: "", details: {} as Record<string, string> };
@@ -153,7 +153,9 @@ export default function SermonDetailPage() {
     );
   }
 
-  const reference = `${sermon.book} ${sermon.chapter}:${sermon.verse_start}-${sermon.verse_end}`;
+  const reference = sermon.book
+    ? `${sermon.book} ${sermon.chapter}:${sermon.verse_start}-${sermon.verse_end}`
+    : sermon.title || "본문 미정";
 
   return (
     <div className="px-5 pt-6 pb-8">

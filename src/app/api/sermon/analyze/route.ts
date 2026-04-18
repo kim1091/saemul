@@ -44,16 +44,16 @@ export async function POST(request: Request) {
   try {
     const { sermonId } = await request.json();
 
-    // 설교 조회 (본인 것만)
+    // 설교 조회 (본인 것만) — 설교공방 호환: passage/sermon_text 포함
     const { data: sermon, error: sermonErr } = await supabase
       .from("sermons")
-      .select("id, book, chapter, verse_start, verse_end, title, content, sermon_type, audience, duration_minutes")
+      .select("id, book, chapter, verse_start, verse_end, title, content, sermon_type, audience, duration_minutes, passage, sermon_text")
       .eq("id", sermonId)
       .eq("user_id", user.id)
       .single();
 
     if (sermonErr || !sermon) {
-      return NextResponse.json({ error: "설교를 찾을 수 없습니다." }, { status: 404 });
+      return NextResponse.json({ error: "설교를 찾을 수 없습니다: " + (sermonErr?.message || "not found") }, { status: 404 });
     }
 
     // 이미 분석이 있는지 확인
@@ -61,13 +61,22 @@ export async function POST(request: Request) {
       .from("sermon_analyses")
       .select("id, scores, feedback")
       .eq("sermon_id", sermonId)
-      .single();
+      .maybeSingle();
 
     if (existing) {
       return NextResponse.json({ error: "이미 분석이 완료된 설교입니다.", analysis: existing }, { status: 409 });
     }
 
-    const reference = `${sermon.book} ${sermon.chapter}:${sermon.verse_start}-${sermon.verse_end}`;
+    // 설교공방 호환: book/chapter가 null이면 passage 사용
+    const reference = sermon.book
+      ? `${sermon.book} ${sermon.chapter}:${sermon.verse_start}-${sermon.verse_end}`
+      : (sermon as Record<string, unknown>).passage as string || "본문 미정";
+
+    // 설교 내용 (설교공방: sermon_text, 샘물: content)
+    const sermonContent = sermon.content || (sermon as Record<string, unknown>).sermon_text as string || "";
+
+    // 너무 긴 설교는 앞부분만 분석 (Vercel 타임아웃 방지)
+    const trimmed = sermonContent.length > 4000 ? sermonContent.substring(0, 4000) + "\n\n(이하 생략)" : sermonContent;
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
       max_tokens: 1500,
       messages: [{
         role: "user",
-        content: `${ANALYZE_PROMPT}\n\n--- 분석 대상 설교 ---\n본문: ${reference}\n제목: ${sermon.title || "없음"}\n유형: ${sermon.sermon_type === "quick" ? "5분 설교" : "일반 설교"} (${sermon.duration_minutes}분)\n청중: ${sermon.audience || "전체"}\n\n설교 내용:\n${sermon.content}`,
+        content: `${ANALYZE_PROMPT}\n\n--- 분석 대상 설교 ---\n본문: ${reference}\n제목: ${sermon.title || "없음"}\n유형: ${sermon.sermon_type === "quick" ? "5분 설교" : "일반 설교"} (${sermon.duration_minutes}분)\n청중: ${sermon.audience || "전체"}\n\n설교 내용:\n${trimmed}`,
       }],
     });
 
