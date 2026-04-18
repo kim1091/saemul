@@ -12,10 +12,18 @@ interface TodayQt {
   commentary?: { key_message?: string };
 }
 
+interface MyGroup {
+  id: string;
+  name: string;
+  latestSharing?: string;
+  latestAuthor?: string;
+}
+
 export default function HomePage() {
   const [displayName, setDisplayName] = useState("");
   const [churchName, setChurchName] = useState<string | null>(null);
   const [todayQt, setTodayQt] = useState<TodayQt | null>(null);
+  const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   const supabase = createClient();
@@ -63,6 +71,51 @@ export default function HomePage() {
       }
     } catch {
       // QT 로드 실패 — 기본 UI 표시
+    }
+
+    // 내 소그룹 + 최신 나눔
+    try {
+      const { data: memberships } = await supabase
+        .from("group_members")
+        .select("group_id")
+        .eq("user_id", user.id);
+      const groupIds = (memberships || []).map((m) => m.group_id);
+
+      if (groupIds.length > 0) {
+        const { data: groups } = await supabase
+          .from("groups")
+          .select("id, name")
+          .in("id", groupIds);
+
+        const result: MyGroup[] = [];
+        for (const g of groups || []) {
+          const { data: latest } = await supabase
+            .from("group_sharings")
+            .select("content, user_id")
+            .eq("group_id", g.id)
+            .order("created_at", { ascending: false })
+            .limit(1);
+          const sharing = latest?.[0];
+          let authorName = "";
+          if (sharing) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("name")
+              .eq("id", sharing.user_id)
+              .single();
+            authorName = prof?.name || "";
+          }
+          result.push({
+            id: g.id,
+            name: g.name,
+            latestSharing: sharing?.content,
+            latestAuthor: authorName,
+          });
+        }
+        setMyGroups(result);
+      }
+    } catch {
+      // 소그룹 로드 실패
     }
 
     setLoading(false);
@@ -179,15 +232,41 @@ export default function HomePage() {
             전체보기
           </Link>
         </div>
-        <p className="text-mid-gray text-sm">
-          아직 소그룹에 참여하지 않았습니다.
-        </p>
-        <Link
-          href="/group"
-          className="inline-block mt-3 text-sm text-green font-medium"
-        >
-          소그룹 찾아보기 →
-        </Link>
+        {myGroups.length > 0 ? (
+          <div className="space-y-3">
+            {myGroups.map((g) => (
+              <Link key={g.id} href={`/group/${g.id}`} className="block">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-green/10 text-green flex items-center justify-center text-sm font-bold shrink-0">
+                    {g.name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-charcoal">{g.name}</p>
+                    {g.latestSharing ? (
+                      <p className="text-xs text-mid-gray mt-0.5 line-clamp-1">
+                        {g.latestAuthor}: {g.latestSharing}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-mid-gray mt-0.5">아직 나눔이 없습니다</p>
+                    )}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <>
+            <p className="text-mid-gray text-sm">
+              아직 소그룹에 참여하지 않았습니다.
+            </p>
+            <Link
+              href="/group"
+              className="inline-block mt-3 text-sm text-green font-medium"
+            >
+              소그룹 찾아보기 →
+            </Link>
+          </>
+        )}
       </div>
     </div>
   );

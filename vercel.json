@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/qt/generate-batch",
+      "schedule": "0 18 * * *"
+    }
+  ]
+}
