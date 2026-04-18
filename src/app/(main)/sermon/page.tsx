@@ -110,24 +110,26 @@ export default function SermonListPage() {
       ) : (
         <div className="space-y-3">
           {sermons.map((s) => (
-            <div key={s.id} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  s.sermon_type === "quick"
-                    ? "bg-gold/20 text-gold"
-                    : "bg-green/10 text-green"
-                }`}>
-                  {s.sermon_type === "quick" ? `${s.duration_minutes}분` : `${s.duration_minutes}분`}
-                </span>
-                <span className="text-xs text-mid-gray">
-                  {s.book} {s.chapter}:{s.verse_start}-{s.verse_end}
-                </span>
+            <Link key={s.id} href={`/sermon/${s.id}`} className="block">
+              <div className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    s.sermon_type === "quick"
+                      ? "bg-gold/20 text-gold"
+                      : "bg-green/10 text-green"
+                  }`}>
+                    {s.duration_minutes}분
+                  </span>
+                  <span className="text-xs text-mid-gray">
+                    {s.book} {s.chapter}:{s.verse_start}-{s.verse_end}
+                  </span>
+                </div>
+                <h3 className="font-bold text-charcoal">{s.title || "제목 없음"}</h3>
+                <p className="text-xs text-mid-gray mt-1">
+                  {new Date(s.created_at).toLocaleDateString("ko-KR")}
+                </p>
               </div>
-              <h3 className="font-bold text-charcoal">{s.title || "제목 없음"}</h3>
-              <p className="text-xs text-mid-gray mt-1">
-                {new Date(s.created_at).toLocaleDateString("ko-KR")}
-              </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}
