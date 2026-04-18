@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { QRCodeSVG } from "qrcode.react";
 
 // ─── 타입 ───────────────────────────────────────────────
 type ReactionType = "amen" | "pray" | "love";
@@ -69,6 +70,12 @@ export default function GroupDetailPage() {
 
   // 이름 캐시
   const [nameMap, setNameMap] = useState<Record<string, string>>({});
+
+  // QR/공유/참여
+  const [showQR, setShowQR] = useState(false);
+  const [isMember, setIsMember] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // ─── 초기 로딩 ───────────────────────────────────────
   useEffect(() => {
@@ -190,6 +197,7 @@ export default function GroupDetailPage() {
       .select("user_id")
       .eq("group_id", groupId);
     const memberIds = (memberData || []).map((m) => m.user_id);
+    setIsMember(user ? memberIds.includes(user.id) : false);
 
     // 이름 캐시 구축
     const nMap: Record<string, string> = {};
@@ -382,9 +390,60 @@ export default function GroupDetailPage() {
               {members.length}명 참여 · 초대코드: {group.invite_code}
             </p>
           </div>
-          <Link href="/group" className="text-sm text-mid-gray">← 목록</Link>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowQR(true)} className="text-lg" title="QR 코드">📱</button>
+            <button onClick={async () => {
+              const url = `${window.location.origin}/group/${groupId}`;
+              if (navigator.share) {
+                await navigator.share({ title: `${group.name} 소그룹`, text: `${group.name} 소그룹에 참여하세요!`, url });
+              } else {
+                await navigator.clipboard.writeText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }
+            }} className="text-lg" title="공유">{copied ? "✅" : "🔗"}</button>
+            <Link href="/group" className="text-sm text-mid-gray">← 목록</Link>
+          </div>
         </div>
       </div>
+
+      {/* QR 모달 */}
+      {showQR && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setShowQR(false)}>
+          <div className="bg-white rounded-2xl p-6 mx-6 text-center max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-green-dark mb-1">{group.name}</h3>
+            <p className="text-xs text-mid-gray mb-4">QR 코드를 스캔하면 소그룹에 참여할 수 있습니다</p>
+            <div className="flex justify-center mb-4">
+              <QRCodeSVG value={`${window.location.origin}/group/${groupId}`} size={200} level="M" />
+            </div>
+            <p className="text-xs text-mid-gray mb-3">초대코드: <span className="font-bold text-charcoal">{group.invite_code}</span></p>
+            <button onClick={() => setShowQR(false)} className="w-full py-2.5 bg-green text-white rounded-lg text-sm font-medium">닫기</button>
+          </div>
+        </div>
+      )}
+
+      {/* 비멤버 참여 배너 */}
+      {!isMember && (
+        <div className="px-5 py-3 bg-gold/10 border-b border-gold/30">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-charcoal">이 소그룹에 참여하시겠어요?</p>
+            <button
+              onClick={async () => {
+                if (!userId) return;
+                setJoining(true);
+                const { error } = await supabase.from("group_members").insert({ group_id: groupId, user_id: userId, role: "member" });
+                if (!error) {
+                  setIsMember(true);
+                  setMembers((prev) => [...prev, { id: userId, name: nameMap[userId] || "나" }]);
+                }
+                setJoining(false);
+              }}
+              disabled={joining}
+              className="px-4 py-1.5 bg-green text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            >{joining ? "참여 중..." : "참여하기"}</button>
+          </div>
+        </div>
+      )}
 
       {/* 나눔 피드 */}
       <div ref={feedRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
