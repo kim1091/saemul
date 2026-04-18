@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/api/"];
-const STATIC_PREFIXES = ["/_next/", "/favicon.ico", "/sitemap.xml", "/robots.txt"];
+const STATIC_PREFIXES = ["/_next/", "/favicon.ico", "/sitemap.xml", "/robots.txt", "/manifest.json", "/icons/"];
 
 function isPublic(pathname: string) {
   if (STATIC_PREFIXES.some((p) => pathname.startsWith(p))) return true;
