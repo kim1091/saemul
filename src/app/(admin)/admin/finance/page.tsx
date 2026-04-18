@@ -127,10 +127,12 @@ export default function FinancePage() {
 
   function formatWon(n: number) { return n.toLocaleString("ko-KR") + "원"; }
 
-  // 이번 달 통계
-  const thisMonth = new Date().toISOString().slice(0, 7);
-  const thisMonthOffer = offerings.filter((o) => o.offering_date.startsWith(thisMonth)).reduce((s, o) => s + o.amount, 0);
-  const thisMonthExp = expenses.filter((e) => e.expense_date.startsWith(thisMonth)).reduce((s, e) => s + e.amount, 0);
+  // 월 필터
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const filteredOfferings = offerings.filter((o) => o.offering_date.startsWith(selectedMonth));
+  const filteredExpenses = expenses.filter((e) => e.expense_date.startsWith(selectedMonth));
+  const monthOffer = filteredOfferings.reduce((s, o) => s + o.amount, 0);
+  const monthExp = filteredExpenses.reduce((s, e) => s + e.amount, 0);
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><p className="text-mid-gray">불러오는 중...</p></div>;
 
@@ -153,14 +155,30 @@ export default function FinancePage() {
         <h1 className="text-xl font-bold text-green-dark">재정 관리</h1>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      {/* 월 선택 */}
+      <div className="mb-3">
+        <input
+          type="month"
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="w-full px-4 py-2.5 bg-white border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-green-dark text-white rounded-xl p-4">
-          <p className="text-gold text-xs">이번 달 헌금</p>
-          <p className="text-xl font-bold mt-1">{formatWon(thisMonthOffer)}</p>
+          <p className="text-gold text-xs">헌금</p>
+          <p className="text-lg font-bold mt-1">{formatWon(monthOffer)}</p>
         </div>
         <div className="bg-green-dark text-white rounded-xl p-4">
-          <p className="text-gold text-xs">이번 달 지출</p>
-          <p className="text-xl font-bold mt-1">{formatWon(thisMonthExp)}</p>
+          <p className="text-gold text-xs">지출</p>
+          <p className="text-lg font-bold mt-1">{formatWon(monthExp)}</p>
+        </div>
+        <div className={`rounded-xl p-4 ${monthOffer - monthExp >= 0 ? "bg-green/10" : "bg-red-50"}`}>
+          <p className="text-xs text-mid-gray">잔액</p>
+          <p className={`text-lg font-bold mt-1 ${monthOffer - monthExp >= 0 ? "text-green-dark" : "text-red-500"}`}>
+            {formatWon(monthOffer - monthExp)}
+          </p>
         </div>
       </div>
 
@@ -240,10 +258,10 @@ export default function FinancePage() {
           )}
 
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            {offerings.length === 0 ? (
-              <p className="text-center text-mid-gray text-sm py-4">헌금 기록이 없습니다.</p>
+            {filteredOfferings.length === 0 ? (
+              <p className="text-center text-mid-gray text-sm py-4">{selectedMonth} 헌금 기록이 없습니다.</p>
             ) : (
-              offerings.slice(0, 10).map((o, i) => (
+              filteredOfferings.map((o, i) => (
                 <div key={o.id} className={`flex justify-between py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
                   <div>
                     <p className="text-sm font-medium text-charcoal">
@@ -298,10 +316,10 @@ export default function FinancePage() {
           )}
 
           <div className="bg-white rounded-xl p-4 shadow-sm">
-            {expenses.length === 0 ? (
-              <p className="text-center text-mid-gray text-sm py-4">지출 기록이 없습니다.</p>
+            {filteredExpenses.length === 0 ? (
+              <p className="text-center text-mid-gray text-sm py-4">{selectedMonth} 지출 기록이 없습니다.</p>
             ) : (
-              expenses.slice(0, 10).map((e, i) => (
+              filteredExpenses.map((e, i) => (
                 <div key={e.id} className={`flex justify-between py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
                   <div>
                     <p className="text-sm font-medium text-charcoal">{e.description}</p>
