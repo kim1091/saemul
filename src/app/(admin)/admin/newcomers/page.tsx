@@ -76,6 +76,25 @@ export default function NewcomersPage() {
     loadData();
   }
 
+  const [editingNC, setEditingNC] = useState<string | null>(null);
+  const [editNC, setEditNC] = useState({ name: "", phone: "", referrer: "", first_visit_date: "" });
+
+  async function handleUpdateNC() {
+    if (!editingNC) return;
+    await supabase.from("newcomers").update({
+      name: editNC.name, phone: editNC.phone || null,
+      referrer: editNC.referrer || null, first_visit_date: editNC.first_visit_date,
+    }).eq("id", editingNC);
+    setEditingNC(null);
+    loadData();
+  }
+
+  async function handleDeleteNC(id: string) {
+    if (!confirm("이 새신자 기록을 삭제할까요?")) return;
+    await supabase.from("newcomers").delete().eq("id", id);
+    loadData();
+  }
+
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><p className="text-mid-gray">불러오는 중...</p></div>;
 
   if (!churchId) {
@@ -148,33 +167,56 @@ export default function NewcomersPage() {
             const currentIdx = STAGES.findIndex((st) => st.value === n.stage);
             return (
               <div key={n.id} className="bg-white rounded-xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-green-dark text-white flex items-center justify-center text-sm font-bold">
-                      {n.name[0]}
+                {editingNC === n.id ? (
+                  <div className="space-y-2">
+                    <input type="text" value={editNC.name} onChange={(e) => setEditNC({ ...editNC, name: e.target.value })}
+                      placeholder="이름" className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                    <div className="flex gap-2">
+                      <input type="tel" value={editNC.phone} onChange={(e) => setEditNC({ ...editNC, phone: e.target.value })}
+                        placeholder="전화번호" className="flex-1 px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                      <input type="date" value={editNC.first_visit_date} onChange={(e) => setEditNC({ ...editNC, first_visit_date: e.target.value })}
+                        className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
                     </div>
-                    <div>
-                      <p className="font-bold text-charcoal text-sm">{n.name}</p>
-                      <p className="text-xs text-mid-gray">{n.phone || "전화번호 없음"}</p>
+                    <input type="text" value={editNC.referrer} onChange={(e) => setEditNC({ ...editNC, referrer: e.target.value })}
+                      placeholder="소개자" className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                    <div className="flex gap-2">
+                      <button onClick={handleUpdateNC} className="flex-1 py-1.5 bg-green text-white rounded-lg text-xs">저장</button>
+                      <button onClick={() => setEditingNC(null)} className="flex-1 py-1.5 bg-white border border-light-gray rounded-lg text-xs">취소</button>
                     </div>
                   </div>
-                  <select
-                    value={n.stage}
-                    onChange={(e) => updateStage(n.id, e.target.value)}
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${stage?.color} border-0 focus:outline-none`}
-                  >
-                    {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                </div>
-                <div className="flex gap-4 text-xs text-mid-gray">
-                  <span>첫방문: {n.first_visit_date}</span>
-                  {n.referrer && <span>소개: {n.referrer}</span>}
-                </div>
-                <div className="flex gap-1 mt-3">
-                  {STAGES.map((s, i) => (
-                    <div key={s.value} className={`flex-1 h-1.5 rounded-full ${i <= currentIdx ? "bg-green" : "bg-light-gray"}`} />
-                  ))}
-                </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded-full bg-green-dark text-white flex items-center justify-center text-sm font-bold">
+                          {n.name[0]}
+                        </div>
+                        <div>
+                          <p className="font-bold text-charcoal text-sm">{n.name}</p>
+                          <p className="text-xs text-mid-gray">{n.phone || "전화번호 없음"}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select value={n.stage} onChange={(e) => updateStage(n.id, e.target.value)}
+                          className={`text-xs px-2 py-1 rounded-full font-medium ${stage?.color} border-0 focus:outline-none`}>
+                          {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                        <button onClick={() => { setEditingNC(n.id); setEditNC({ name: n.name, phone: n.phone || "", referrer: n.referrer || "", first_visit_date: n.first_visit_date }); }}
+                          className="text-[10px] text-green">수정</button>
+                        <button onClick={() => handleDeleteNC(n.id)} className="text-[10px] text-mid-gray hover:text-red-500">삭제</button>
+                      </div>
+                    </div>
+                    <div className="flex gap-4 text-xs text-mid-gray">
+                      <span>첫방문: {n.first_visit_date}</span>
+                      {n.referrer && <span>소개: {n.referrer}</span>}
+                    </div>
+                    <div className="flex gap-1 mt-3">
+                      {STAGES.map((s, i) => (
+                        <div key={s.value} className={`flex-1 h-1.5 rounded-full ${i <= currentIdx ? "bg-green" : "bg-light-gray"}`} />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}

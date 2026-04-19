@@ -36,6 +36,23 @@ export default function ChurchSetupPage() {
   const [churchAddress, setChurchAddress] = useState("");
   const [churchPhone, setChurchPhone] = useState("");
 
+  // 교회 정보 수정
+  const [editingChurch, setEditingChurch] = useState(false);
+  const [editChurchData, setEditChurchData] = useState({ name: "", address: "", phone: "" });
+
+  async function handleUpdateChurch() {
+    if (!church || !editChurchData.name.trim()) return;
+    await supabase.from("churches").update({
+      name: editChurchData.name.trim(),
+      address: editChurchData.address || null,
+      phone: editChurchData.phone || null,
+    }).eq("id", church.id);
+    // profiles의 church_name도 동기화
+    await supabase.from("profiles").update({ church_name: editChurchData.name.trim() }).eq("church_id", church.id);
+    setEditingChurch(false);
+    loadData();
+  }
+
   // 예배 유형 폼
   const [showWorshipForm, setShowWorshipForm] = useState(false);
   const [worshipName, setWorshipName] = useState("");
@@ -196,9 +213,30 @@ export default function ChurchSetupPage() {
       {church && (
         <>
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
-            <h2 className="text-lg font-bold text-green-dark">{church.name}</h2>
-            {church.address && <p className="text-sm text-mid-gray mt-1">{church.address}</p>}
-            {church.phone && <p className="text-sm text-mid-gray">{church.phone}</p>}
+            {editingChurch ? (
+              <div className="space-y-2">
+                <input type="text" value={editChurchData.name} onChange={(e) => setEditChurchData({ ...editChurchData, name: e.target.value })}
+                  placeholder="교회 이름" className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                <input type="text" value={editChurchData.address} onChange={(e) => setEditChurchData({ ...editChurchData, address: e.target.value })}
+                  placeholder="주소" className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                <input type="tel" value={editChurchData.phone} onChange={(e) => setEditChurchData({ ...editChurchData, phone: e.target.value })}
+                  placeholder="전화번호" className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                <div className="flex gap-2">
+                  <button onClick={handleUpdateChurch} className="flex-1 py-2 bg-green text-white rounded-lg text-sm font-medium">저장</button>
+                  <button onClick={() => setEditingChurch(false)} className="flex-1 py-2 bg-white border border-light-gray rounded-lg text-sm">취소</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-green-dark">{church.name}</h2>
+                  {church.address && <p className="text-sm text-mid-gray mt-1">{church.address}</p>}
+                  {church.phone && <p className="text-sm text-mid-gray">{church.phone}</p>}
+                </div>
+                <button onClick={() => { setEditingChurch(true); setEditChurchData({ name: church.name, address: church.address || "", phone: church.phone || "" }); }}
+                  className="text-xs text-green px-3 py-1.5 border border-green/30 rounded-lg">수정</button>
+              </div>
+            )}
           </div>
 
           {/* 초대 코드 + QR */}

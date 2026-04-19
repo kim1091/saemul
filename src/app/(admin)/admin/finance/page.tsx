@@ -61,6 +61,10 @@ export default function FinancePage() {
   });
 
   const [memberNames, setMemberNames] = useState<string[]>([]);
+  const [editingOffering, setEditingOffering] = useState<string | null>(null);
+  const [editingExpense, setEditingExpense] = useState<string | null>(null);
+  const [editOffer, setEditOffer] = useState({ amount: "", date: "", memo: "" });
+  const [editExp, setEditExp] = useState({ amount: "", date: "", description: "" });
 
   const supabase = createClient();
 
@@ -128,6 +132,40 @@ export default function FinancePage() {
     if (error) { alert("저장 실패: " + error.message); return; }
     setExpenseData({ amount: "", description: "", date: new Date().toISOString().split("T")[0] });
     setShowExpenseForm(false);
+    loadData();
+  }
+
+  async function handleDeleteOffering(id: string) {
+    if (!confirm("이 헌금 기록을 삭제할까요?")) return;
+    await supabase.from("offerings").delete().eq("id", id);
+    loadData();
+  }
+
+  async function handleUpdateOffering() {
+    if (!editingOffering) return;
+    await supabase.from("offerings").update({
+      amount: parseInt(editOffer.amount),
+      offering_date: editOffer.date,
+      memo: editOffer.memo || null,
+    }).eq("id", editingOffering);
+    setEditingOffering(null);
+    loadData();
+  }
+
+  async function handleDeleteExpense(id: string) {
+    if (!confirm("이 지출 기록을 삭제할까요?")) return;
+    await supabase.from("expenses").delete().eq("id", id);
+    loadData();
+  }
+
+  async function handleUpdateExpense() {
+    if (!editingExpense) return;
+    await supabase.from("expenses").update({
+      amount: parseInt(editExp.amount),
+      expense_date: editExp.date,
+      description: editExp.description,
+    }).eq("id", editingExpense);
+    setEditingExpense(null);
     loadData();
   }
 
@@ -275,16 +313,40 @@ export default function FinancePage() {
               <p className="text-center text-mid-gray text-sm py-4">{selectedMonth} 헌금 기록이 없습니다.</p>
             ) : (
               filteredOfferings.map((o, i) => (
-                <div key={o.id} className={`flex justify-between py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
-                  <div>
-                    <p className="text-sm font-medium text-charcoal">
-                      {o.offering_type === "purpose" && o.custom_name
-                        ? `목적 · ${o.custom_name}`
-                        : OFFERING_TYPES.find((t) => t.value === o.offering_type)?.label}
-                    </p>
-                    <p className="text-xs text-mid-gray">{o.offering_date}{o.memo && ` | ${o.memo}`}</p>
-                  </div>
-                  <span className="text-sm font-bold text-green-dark">{formatWon(o.amount)}</span>
+                <div key={o.id} className={`py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
+                  {editingOffering === o.id ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input type="number" value={editOffer.amount} onChange={(e) => setEditOffer({ ...editOffer, amount: e.target.value })}
+                          className="flex-1 px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                        <input type="date" value={editOffer.date} onChange={(e) => setEditOffer({ ...editOffer, date: e.target.value })}
+                          className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                      </div>
+                      <input type="text" value={editOffer.memo} onChange={(e) => setEditOffer({ ...editOffer, memo: e.target.value })} placeholder="메모"
+                        className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdateOffering} className="flex-1 py-1.5 bg-green text-white rounded-lg text-xs">저장</button>
+                        <button onClick={() => setEditingOffering(null)} className="flex-1 py-1.5 bg-white border border-light-gray rounded-lg text-xs">취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium text-charcoal">
+                          {o.offering_type === "purpose" && o.custom_name
+                            ? `목적 · ${o.custom_name}`
+                            : OFFERING_TYPES.find((t) => t.value === o.offering_type)?.label}
+                        </p>
+                        <p className="text-xs text-mid-gray">{o.offering_date}{o.memo && ` | ${o.memo}`}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-green-dark">{formatWon(o.amount)}</span>
+                        <button onClick={() => { setEditingOffering(o.id); setEditOffer({ amount: String(o.amount), date: o.offering_date, memo: o.memo || "" }); }}
+                          className="text-[10px] text-green">수정</button>
+                        <button onClick={() => handleDeleteOffering(o.id)} className="text-[10px] text-mid-gray hover:text-red-500">삭제</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -333,12 +395,36 @@ export default function FinancePage() {
               <p className="text-center text-mid-gray text-sm py-4">{selectedMonth} 지출 기록이 없습니다.</p>
             ) : (
               filteredExpenses.map((e, i) => (
-                <div key={e.id} className={`flex justify-between py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
-                  <div>
-                    <p className="text-sm font-medium text-charcoal">{e.description}</p>
-                    <p className="text-xs text-mid-gray">{e.expense_date}</p>
-                  </div>
-                  <span className="text-sm font-bold text-red-500">-{formatWon(e.amount)}</span>
+                <div key={e.id} className={`py-2 ${i > 0 ? "border-t border-light-gray/50" : ""}`}>
+                  {editingExpense === e.id ? (
+                    <div className="space-y-2">
+                      <input type="text" value={editExp.description} onChange={(ev) => setEditExp({ ...editExp, description: ev.target.value })}
+                        className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                      <div className="flex gap-2">
+                        <input type="number" value={editExp.amount} onChange={(ev) => setEditExp({ ...editExp, amount: ev.target.value })}
+                          className="flex-1 px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                        <input type="date" value={editExp.date} onChange={(ev) => setEditExp({ ...editExp, date: ev.target.value })}
+                          className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdateExpense} className="flex-1 py-1.5 bg-green text-white rounded-lg text-xs">저장</button>
+                        <button onClick={() => setEditingExpense(null)} className="flex-1 py-1.5 bg-white border border-light-gray rounded-lg text-xs">취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium text-charcoal">{e.description}</p>
+                        <p className="text-xs text-mid-gray">{e.expense_date}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-red-500">-{formatWon(e.amount)}</span>
+                        <button onClick={() => { setEditingExpense(e.id); setEditExp({ amount: String(e.amount), date: e.expense_date, description: e.description }); }}
+                          className="text-[10px] text-green">수정</button>
+                        <button onClick={() => handleDeleteExpense(e.id)} className="text-[10px] text-mid-gray hover:text-red-500">삭제</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}

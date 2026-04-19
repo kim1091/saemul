@@ -99,6 +99,28 @@ export default function VisitationPage() {
     loadData();
   }
 
+  const [editingVisit, setEditingVisit] = useState<string | null>(null);
+  const [editVisit, setEditVisit] = useState({ visitee_name: "", visit_type: "", visit_date: "", content: "", prayer_requests: "" });
+
+  async function handleUpdateVisit() {
+    if (!editingVisit) return;
+    await supabase.from("visitations").update({
+      visitee_name: editVisit.visitee_name,
+      visit_type: editVisit.visit_type,
+      visit_date: editVisit.visit_date,
+      content: editVisit.content,
+      prayer_requests: editVisit.prayer_requests || null,
+    }).eq("id", editingVisit);
+    setEditingVisit(null);
+    loadData();
+  }
+
+  async function handleDeleteVisit(id: string) {
+    if (!confirm("이 심방 기록을 삭제할까요?")) return;
+    await supabase.from("visitations").delete().eq("id", id);
+    loadData();
+  }
+
   async function toggleFollowUp(id: string, current: boolean) {
     await supabase
       .from("visitations")
@@ -205,24 +227,54 @@ export default function VisitationPage() {
         <div className="space-y-3">
           {visits.map((v) => (
             <div key={v.id} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-charcoal">{v.visitee_name}</span>
-                  <span className="text-xs px-2 py-0.5 bg-cream-dark rounded-full text-mid-gray">
-                    {VISIT_TYPES.find((t) => t.value === v.visit_type)?.label}
-                  </span>
+              {editingVisit === v.id ? (
+                <div className="space-y-2">
+                  <input type="text" value={editVisit.visitee_name} list="member-names-edit"
+                    onChange={(e) => setEditVisit({ ...editVisit, visitee_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                  <datalist id="member-names-edit">{memberNames.map((n, i) => <option key={i} value={n} />)}</datalist>
+                  <div className="flex gap-2">
+                    <select value={editVisit.visit_type} onChange={(e) => setEditVisit({ ...editVisit, visit_type: e.target.value })}
+                      className="flex-1 px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm">
+                      {VISIT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <input type="date" value={editVisit.visit_date} onChange={(e) => setEditVisit({ ...editVisit, visit_date: e.target.value })}
+                      className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                  </div>
+                  <textarea value={editVisit.content} onChange={(e) => setEditVisit({ ...editVisit, content: e.target.value })} rows={2}
+                    className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm resize-none" />
+                  <input type="text" value={editVisit.prayer_requests} onChange={(e) => setEditVisit({ ...editVisit, prayer_requests: e.target.value })} placeholder="기도 제목"
+                    className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={handleUpdateVisit} className="flex-1 py-1.5 bg-green text-white rounded-lg text-xs">저장</button>
+                    <button onClick={() => setEditingVisit(null)} className="flex-1 py-1.5 bg-white border border-light-gray rounded-lg text-xs">취소</button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => toggleFollowUp(v.id, v.follow_up_done)}
-                  className={`text-xs font-medium ${v.follow_up_done ? "text-green" : "text-gold"}`}
-                >
-                  {v.follow_up_done ? "완료" : "진행중"}
-                </button>
-              </div>
-              <p className="text-mid-gray text-xs">{v.visit_date}</p>
-              <p className="text-sm text-charcoal mt-2">{v.content}</p>
-              {v.prayer_requests && (
-                <p className="text-sm text-gold mt-2">🙏 {v.prayer_requests}</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-charcoal">{v.visitee_name}</span>
+                      <span className="text-xs px-2 py-0.5 bg-cream-dark rounded-full text-mid-gray">
+                        {VISIT_TYPES.find((t) => t.value === v.visit_type)?.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => toggleFollowUp(v.id, v.follow_up_done)}
+                        className={`text-xs font-medium ${v.follow_up_done ? "text-green" : "text-gold"}`}>
+                        {v.follow_up_done ? "완료" : "진행중"}
+                      </button>
+                      <button onClick={() => { setEditingVisit(v.id); setEditVisit({ visitee_name: v.visitee_name || "", visit_type: v.visit_type, visit_date: v.visit_date, content: v.content, prayer_requests: v.prayer_requests || "" }); }}
+                        className="text-[10px] text-green">수정</button>
+                      <button onClick={() => handleDeleteVisit(v.id)} className="text-[10px] text-mid-gray hover:text-red-500">삭제</button>
+                    </div>
+                  </div>
+                  <p className="text-mid-gray text-xs">{v.visit_date}</p>
+                  <p className="text-sm text-charcoal mt-2">{v.content}</p>
+                  {v.prayer_requests && (
+                    <p className="text-sm text-gold mt-2">🙏 {v.prayer_requests}</p>
+                  )}
+                </>
               )}
             </div>
           ))}
