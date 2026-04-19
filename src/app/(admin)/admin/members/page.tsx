@@ -18,7 +18,7 @@ interface ChurchMember {
   is_active: boolean;
 }
 
-const DEPARTMENTS = ["전체", "장년부", "청년부", "고등부", "중등부", "아동부", "유치부"];
+const DEPARTMENTS = ["전체", "가족별", "장년부", "청년부", "고등부", "중등부", "아동부", "유치부"];
 const GENDER: Record<string, string> = { male: "남", female: "여" };
 
 export default function MembersPage() {
@@ -32,6 +32,10 @@ export default function MembersPage() {
   // 교인 추가 폼
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "본인" });
+
+  // 수정 모드
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "" });
 
   const supabase = createClient();
 
@@ -76,6 +80,31 @@ export default function MembersPage() {
     loadData();
   }
 
+  function startEdit(m: ChurchMember) {
+    setEditingId(m.id);
+    setEditForm({
+      name: m.name,
+      birth_date: m.birth_date || "",
+      gender: m.gender || "",
+      phone: m.phone || "",
+      relation: m.relation || "본인",
+    });
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editForm.name.trim()) return;
+    const { error } = await supabase.from("church_members").update({
+      name: editForm.name.trim(),
+      birth_date: editForm.birth_date || null,
+      gender: editForm.gender || null,
+      phone: editForm.phone || null,
+      relation: editForm.relation,
+    }).eq("id", editingId);
+    if (error) { alert("수정 실패: " + error.message); return; }
+    setEditingId(null);
+    loadData();
+  }
+
   async function handleToggleActive(id: string) {
     if (!confirm("이 교인을 비활성화할까요?")) return;
     await supabase.from("church_members").update({ is_active: false }).eq("id", id);
@@ -113,18 +142,37 @@ export default function MembersPage() {
   });
 
   const filtered = members.filter((m) => {
-    if (deptFilter !== "전체" && m.department !== deptFilter) return false;
+    if (deptFilter !== "전체" && deptFilter !== "가족별" && m.department !== deptFilter) return false;
     if (search && !m.name.includes(search) && !(m.phone || "").includes(search)) return false;
     return true;
   });
 
-  // 부서별 그룹핑
+  // 그룹핑: 부서별 또는 가족별
   const grouped: Record<string, ChurchMember[]> = {};
-  filtered.forEach((m) => {
-    const dept = m.department || "미분류";
-    if (!grouped[dept]) grouped[dept] = [];
-    grouped[dept].push(m);
-  });
+  if (deptFilter === "가족별") {
+    // registered_by 기준으로 가족 묶기
+    filtered.forEach((m) => {
+      const head = m.relation === "본인" ? m.name : null;
+      const key = m.registered_by || m.id;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(m);
+    });
+    // 그룹 키를 "본인" 이름으로 변환
+    const renamed: Record<string, ChurchMember[]> = {};
+    Object.values(grouped).forEach((family) => {
+      const head = family.find((m) => m.relation === "본인");
+      const label = (head?.name || family[0]?.name || "미분류") + " 가족";
+      renamed[label] = family;
+    });
+    Object.keys(grouped).forEach((k) => delete grouped[k]);
+    Object.assign(grouped, renamed);
+  } else {
+    filtered.forEach((m) => {
+      const dept = m.department || "미분류";
+      if (!grouped[dept]) grouped[dept] = [];
+      grouped[dept].push(m);
+    });
+  }
 
   return (
     <div className="px-5 pt-6 pb-8">
@@ -221,33 +269,60 @@ export default function MembersPage() {
             <div className="bg-white rounded-xl shadow-sm divide-y divide-light-gray/50">
               {list.map((m) => {
                 const age = getAge(m.birth_date);
+                const isEditing = editingId === m.id;
                 return (
-                  <div key={m.id} className="px-4 py-3 flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${
-                      m.profile_id ? "bg-green text-white" : "bg-light-gray text-mid-gray"
-                    }`}>
-                      {m.name[0]}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-medium text-sm text-charcoal">{m.name}</span>
-                        {m.grade && <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded-full">{m.grade}</span>}
-                        {m.relation && m.relation !== "본인" && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-cream text-mid-gray rounded-full">{m.relation}</span>
-                        )}
-                        {m.profile_id && <span className="text-[10px] text-green">앱</span>}
+                  <div key={m.id} className="px-4 py-3">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                        <div className="flex gap-2">
+                          <input type="date" value={editForm.birth_date} onChange={(e) => setEditForm({ ...editForm, birth_date: e.target.value })}
+                            className="flex-1 px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                          <select value={editForm.gender} onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+                            className="w-16 px-2 py-2 bg-cream border border-light-gray rounded-lg text-sm">
+                            <option value="">-</option><option value="male">남</option><option value="female">여</option>
+                          </select>
+                          <select value={editForm.relation} onChange={(e) => setEditForm({ ...editForm, relation: e.target.value })}
+                            className="w-20 px-2 py-2 bg-cream border border-light-gray rounded-lg text-sm">
+                            <option>본인</option><option>배우자</option><option>자녀</option><option>부모</option><option>형제/자매</option>
+                          </select>
+                        </div>
+                        <input type="tel" placeholder="전화번호" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          className="w-full px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                        <div className="flex gap-2">
+                          <button onClick={handleSaveEdit} className="flex-1 py-2 bg-green text-white rounded-lg text-sm font-medium">저장</button>
+                          <button onClick={() => setEditingId(null)} className="flex-1 py-2 bg-white border border-light-gray rounded-lg text-sm">취소</button>
+                        </div>
                       </div>
-                      <p className="text-xs text-mid-gray">
-                        {[
-                          m.gender ? GENDER[m.gender] : null,
-                          age !== null ? `${age}세` : null,
-                          m.phone,
-                        ].filter(Boolean).join(" · ") || "정보 없음"}
-                      </p>
-                    </div>
-                    <button onClick={() => handleToggleActive(m.id)} className="text-xs text-mid-gray hover:text-red-500">
-                      제거
-                    </button>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${
+                          m.profile_id ? "bg-green text-white" : "bg-light-gray text-mid-gray"
+                        }`}>
+                          {m.name[0]}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-sm text-charcoal">{m.name}</span>
+                            {m.grade && <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded-full">{m.grade}</span>}
+                            {m.relation && m.relation !== "본인" && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-cream text-mid-gray rounded-full">{m.relation}</span>
+                            )}
+                            {m.profile_id && <span className="text-[10px] text-green">앱</span>}
+                          </div>
+                          <p className="text-xs text-mid-gray">
+                            {[
+                              m.gender ? GENDER[m.gender] : null,
+                              age !== null ? `${age}세` : null,
+                              m.phone,
+                            ].filter(Boolean).join(" · ") || "정보 없음"}
+                          </p>
+                        </div>
+                        <button onClick={() => startEdit(m)} className="text-xs text-green hover:text-green-dark mr-1">수정</button>
+                        <button onClick={() => handleToggleActive(m.id)} className="text-xs text-mid-gray hover:text-red-500">제거</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
