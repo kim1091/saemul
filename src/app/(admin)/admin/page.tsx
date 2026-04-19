@@ -47,8 +47,8 @@ export default function AdminDashboard() {
         .eq("church_id", churchId).gte("offering_date", `${thisMonth}-01`),
       supabase.from("join_requests").select("id", { count: "exact", head: true })
         .eq("church_id", churchId).eq("status", "pending"),
-      supabase.from("profiles").select("id", { count: "exact", head: true })
-        .eq("church_id", churchId),
+      supabase.from("church_members").select("id", { count: "exact", head: true })
+        .eq("church_id", churchId).eq("is_active", true),
     ]);
 
     setStats({
