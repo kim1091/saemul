@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
+import { QRCodeSVG } from "qrcode.react";
 
 interface ChurchMember {
   id: string;
@@ -30,10 +31,14 @@ export default function AttendancePage() {
   const [pastorId, setPastorId] = useState<string | null>(null);
   const [deptFilter, setDeptFilter] = useState("전체");
 
+  // 출석 세션
+  const [session, setSession] = useState<{ id: string; code: string; is_open: boolean } | null>(null);
+  const [showQR, setShowQR] = useState(false);
+
   const supabase = createClient();
 
   useEffect(() => { loadInit(); }, []);
-  useEffect(() => { if (selectedWorship) loadAttendance(); }, [selectedWorship, selectedDate]);
+  useEffect(() => { if (selectedWorship) { loadAttendance(); loadSession(); } }, [selectedWorship, selectedDate]);
 
   async function loadInit() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -108,6 +113,40 @@ export default function AttendancePage() {
     loadAttendance();
   }
 
+  async function loadSession() {
+    if (!churchId || !selectedWorship) return;
+    const { data } = await supabase
+      .from("attendance_sessions")
+      .select("id, code, is_open")
+      .eq("church_id", churchId)
+      .eq("worship_type_id", selectedWorship)
+      .eq("attend_date", selectedDate)
+      .maybeSingle();
+    setSession(data);
+  }
+
+  async function openSession() {
+    if (!churchId || !selectedWorship || !pastorId) return;
+    const code = String(Math.floor(1000 + Math.random() * 9000));
+    const { data, error } = await supabase.from("attendance_sessions").upsert({
+      church_id: churchId,
+      worship_type_id: selectedWorship,
+      attend_date: selectedDate,
+      code,
+      is_open: true,
+      opened_by: pastorId,
+    }, { onConflict: "church_id,worship_type_id,attend_date" }).select().single();
+    if (!error && data) setSession(data);
+  }
+
+  async function closeSession() {
+    if (!session) return;
+    await supabase.from("attendance_sessions")
+      .update({ is_open: false, closed_at: new Date().toISOString() })
+      .eq("id", session.id);
+    setSession({ ...session, is_open: false });
+  }
+
   // 전체 선택/해제
   async function toggleAll(check: boolean) {
     if (!churchId || !selectedWorship || !pastorId) return;
@@ -179,6 +218,44 @@ export default function AttendancePage() {
           className="flex-1 px-3 py-2 bg-white border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green">
           {worships.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
+      </div>
+
+      {/* 출석 세션 (셀프 체크인) */}
+      <div className="bg-white rounded-xl shadow-sm p-4 mb-3">
+        {session?.is_open ? (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-green rounded-full animate-pulse" />
+                <span className="text-sm font-bold text-green">출석 진행 중</span>
+              </div>
+              <button onClick={closeSession} className="text-xs px-3 py-1.5 bg-red-50 text-red-500 rounded-lg font-medium">닫기</button>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-3xl font-bold text-green-dark tracking-widest">{session.code}</p>
+                <p className="text-[10px] text-mid-gray mt-1">출석 코드</p>
+              </div>
+              <button onClick={() => setShowQR(!showQR)} className="px-3 py-2 bg-cream rounded-lg text-xs font-medium text-charcoal">
+                {showQR ? "QR 닫기" : "QR 보기"}
+              </button>
+            </div>
+            {showQR && (
+              <div className="mt-3 flex justify-center">
+                <QRCodeSVG value={`${typeof window !== "undefined" ? window.location.origin : ""}/my/attendance?code=${session.code}&worship=${selectedWorship}&date=${selectedDate}`} size={160} level="M" />
+              </div>
+            )}
+            <p className="text-[10px] text-mid-gray mt-2">성도가 코드를 입력하거나 QR을 스캔하면 자동 출석됩니다</p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-charcoal">셀프 출석 체크인</p>
+              <p className="text-xs text-mid-gray">성도가 직접 출석할 수 있도록 코드를 생성합니다</p>
+            </div>
+            <button onClick={openSession} className="px-4 py-2 bg-green text-white text-sm font-medium rounded-lg">출석 열기</button>
+          </div>
+        )}
       </div>
 
       {/* 부서 필터 */}
