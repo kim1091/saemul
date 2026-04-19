@@ -188,6 +188,10 @@ export default function FinancePage() {
         </div>
       </div>
 
+      <Link href="/admin/finance/receipt" className="block w-full py-2.5 bg-white border border-green text-green font-medium rounded-xl mb-3 text-sm text-center">
+        📄 기부금 영수증 발급
+      </Link>
+
       <div className="flex bg-white rounded-xl p-1 mb-4 shadow-sm">
         {[
           { key: "offering" as const, label: "헌금" },
