@@ -11,7 +11,7 @@ const adminMenus = [
   { href: "/admin/visitation", icon: "🏠", title: "심방 관리", desc: "심방 기록, 기도제목, 후속조치", color: "bg-gold" },
   { href: "/admin/finance", icon: "💰", title: "재정 관리", desc: "헌금, 예산, 지출, 보고서", color: "bg-green-dark" },
   { href: "/admin/newcomers", icon: "🙋", title: "새신자 관리", desc: "양육 단계 추적, 담당자 배정", color: "bg-[#8B6B3D]" },
-  { href: "/admin/members", icon: "👥", title: "성도 관리", desc: "교인 정보, 설교 권한 승인", color: "bg-mid-gray" },
+  { href: "/admin/members", icon: "👥", title: "성도 관리", desc: "교인 명부, 부서별 관리", color: "bg-mid-gray" },
 ];
 
 function formatWon(n: number) { return n.toLocaleString("ko-KR") + "원"; }

@@ -244,7 +244,7 @@ export default function MembersPage() {
               deptFilter === d ? "bg-green text-white" : "bg-white text-mid-gray border border-light-gray"
             }`}
           >
-            {d} {d === "전체" ? members.length : (deptCounts[d] || 0)}
+            {d} {d === "전체" ? members.length : d === "가족별" ? new Set(members.map(m => m.registered_by || m.id)).size : (deptCounts[d] || 0)}
           </button>
         ))}
       </div>

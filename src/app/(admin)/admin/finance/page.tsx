@@ -60,6 +60,8 @@ export default function FinancePage() {
     date: new Date().toISOString().split("T")[0],
   });
 
+  const [memberNames, setMemberNames] = useState<string[]>([]);
+
   const supabase = createClient();
 
   useEffect(() => { loadData(); }, []);
@@ -74,6 +76,10 @@ export default function FinancePage() {
 
     if (!profile?.church_id) { setLoading(false); return; }
     setChurchId(profile.church_id);
+
+    const { data: cms } = await supabase.from("church_members").select("name")
+      .eq("church_id", profile.church_id).eq("is_active", true).order("name");
+    setMemberNames((cms || []).map((m) => m.name));
 
     const [{ data: ofs }, { data: exs }] = await Promise.all([
       supabase.from("offerings")
@@ -240,11 +246,14 @@ export default function FinancePage() {
               </div>
 
               <input
-                type="text" placeholder="성도 이름 (선택, 익명이면 비워두기)"
+                type="text" placeholder="성도 이름 (선택, 익명이면 비워두기)" list="offerer-names"
                 value={offeringData.offerer_name}
                 onChange={(e) => setOfferingData({ ...offeringData, offerer_name: e.target.value })}
                 className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
               />
+              <datalist id="offerer-names">
+                {memberNames.map((n, i) => <option key={i} value={n} />)}
+              </datalist>
               <input
                 type="text" placeholder="메모 (선택)"
                 value={offeringData.memo}

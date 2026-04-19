@@ -36,6 +36,7 @@ export default function VisitationPage() {
     content: "",
     prayer_requests: "",
   });
+  const [memberNames, setMemberNames] = useState<string[]>([]);
 
   const supabase = createClient();
 
@@ -57,13 +58,17 @@ export default function VisitationPage() {
     if (!profile?.church_id) { setLoading(false); return; }
     setChurchId(profile.church_id);
 
-    const { data } = await supabase
-      .from("visitations")
-      .select("*")
-      .eq("church_id", profile.church_id)
-      .order("visit_date", { ascending: false });
+    const [{ data }, { data: cms }] = await Promise.all([
+      supabase.from("visitations").select("*")
+        .eq("church_id", profile.church_id)
+        .order("visit_date", { ascending: false }),
+      supabase.from("church_members").select("name")
+        .eq("church_id", profile.church_id).eq("is_active", true)
+        .order("name"),
+    ]);
 
     setVisits(data || []);
+    setMemberNames((cms || []).map((m) => m.name));
     setLoading(false);
   }
 
@@ -135,12 +140,17 @@ export default function VisitationPage() {
 
       {showForm && (
         <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
-          <input
-            type="text" placeholder="대상 성도 이름 *"
-            value={formData.visitee_name}
-            onChange={(e) => setFormData({ ...formData, visitee_name: e.target.value })}
-            className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
-          />
+          <div className="relative">
+            <input
+              type="text" placeholder="대상 성도 이름 *" list="member-names"
+              value={formData.visitee_name}
+              onChange={(e) => setFormData({ ...formData, visitee_name: e.target.value })}
+              className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+            />
+            <datalist id="member-names">
+              {memberNames.map((n, i) => <option key={i} value={n} />)}
+            </datalist>
+          </div>
           <div className="flex gap-2">
             <select
               value={formData.visit_type}
