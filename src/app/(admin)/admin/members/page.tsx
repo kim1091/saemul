@@ -4,32 +4,34 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
-interface Member {
+interface ChurchMember {
   id: string;
-  email: string;
-  name: string | null;
-  role: string;
-  rank: string | null;
-  services: string[] | null;
-  phone: string | null;
+  name: string;
   birth_date: string | null;
   gender: string | null;
-  marital_status: string | null;
-  address: string | null;
-  baptism_date: string | null;
-  registration_date: string | null;
-  district: string | null;
-  family: { relation: string; name: string; birth_date: string }[] | null;
+  phone: string | null;
+  relation: string | null;
+  department: string | null;
+  grade: string | null;
+  profile_id: string | null;
+  registered_by: string | null;
+  is_active: boolean;
 }
 
+const DEPARTMENTS = ["전체", "장년부", "청년부", "고등부", "중등부", "아동부", "유치부"];
+const GENDER: Record<string, string> = { male: "남", female: "여" };
+
 export default function MembersPage() {
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<ChurchMember[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [churchId, setChurchId] = useState<string | null>(null);
   const [pastorId, setPastorId] = useState<string | null>(null);
-  const [permMap, setPermMap] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
+  const [deptFilter, setDeptFilter] = useState("전체");
+
+  // 교인 추가 폼
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "본인" });
 
   const supabase = createClient();
 
@@ -45,66 +47,49 @@ export default function MembersPage() {
     if (!profile?.church_id) { setLoading(false); return; }
     setChurchId(profile.church_id);
 
-    // 같은 교회 모든 성도
     const { data } = await supabase
-      .from("profiles")
-      .select("id, name, role, rank, services, phone, birth_date, gender, marital_status, address, baptism_date, registration_date, district, family")
-      .eq("church_id", profile.church_id);
+      .from("church_members")
+      .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active")
+      .eq("church_id", profile.church_id)
+      .eq("is_active", true)
+      .order("department")
+      .order("name");
 
-    // email은 profiles에 있으니 직접 가져오기
-    const { data: withEmail } = await supabase
-      .from("profiles")
-      .select("id, email")
-      .eq("church_id", profile.church_id);
-
-    const emailMap: Record<string, string> = {};
-    (withEmail || []).forEach((p: { id: string; email?: string }) => { emailMap[p.id] = p.email || ""; });
-
-    const list: Member[] = (data || []).map((p) => ({
-      ...p,
-      email: emailMap[p.id] || "",
-    })) as Member[];
-
-    setMembers(list);
-
-    // 설교 권한 조회
-    const userIds = list.filter((m) => m.role === "member").map((m) => m.id);
-    if (userIds.length > 0) {
-      const { data: perms } = await supabase
-        .from("sermon_permissions")
-        .select("user_id, is_active")
-        .in("user_id", userIds)
-        .eq("permission_type", "full_sermon");
-      const map: Record<string, boolean> = {};
-      (perms || []).forEach((p) => { map[p.user_id] = p.is_active; });
-      setPermMap(map);
-    }
-
+    setMembers(data || []);
     setLoading(false);
   }
 
-  async function togglePermission(memberId: string) {
-    if (!pastorId) return;
-    const current = permMap[memberId];
-    if (current) {
-      await supabase.from("sermon_permissions")
-        .update({ is_active: false })
-        .eq("user_id", memberId)
-        .eq("permission_type", "full_sermon");
-    } else {
-      // UPSERT
-      await supabase.from("sermon_permissions").upsert({
-        user_id: memberId,
-        granted_by: pastorId,
-        permission_type: "full_sermon",
-        is_active: true,
-      }, { onConflict: "user_id,permission_type" });
-    }
+  async function handleAddMember() {
+    if (!form.name.trim() || !churchId || !pastorId) return;
+    const { error } = await supabase.from("church_members").insert({
+      church_id: churchId,
+      registered_by: pastorId,
+      name: form.name.trim(),
+      birth_date: form.birth_date || null,
+      gender: form.gender || null,
+      phone: form.phone || null,
+      relation: form.relation,
+    });
+    if (error) { alert("추가 실패: " + error.message); return; }
+    setForm({ name: "", birth_date: "", gender: "", phone: "", relation: "본인" });
+    setShowForm(false);
     loadData();
   }
 
-  const GENDER: Record<string, string> = { male: "남성", female: "여성" };
-  const MARITAL: Record<string, string> = { single: "미혼", married: "기혼", widowed: "사별", divorced: "이혼" };
+  async function handleToggleActive(id: string) {
+    if (!confirm("이 교인을 비활성화할까요?")) return;
+    await supabase.from("church_members").update({ is_active: false }).eq("id", id);
+    loadData();
+  }
+
+  function getAge(birthDate: string | null) {
+    if (!birthDate) return null;
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+    return age;
+  }
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><p className="text-mid-gray">불러오는 중...</p></div>;
 
@@ -120,107 +105,155 @@ export default function MembersPage() {
     );
   }
 
-  const filtered = members.filter((m) =>
-    !search || m.name?.includes(search) || m.email.includes(search)
-  );
+  // 부서별 카운트
+  const deptCounts: Record<string, number> = {};
+  members.forEach((m) => {
+    const d = m.department || "미분류";
+    deptCounts[d] = (deptCounts[d] || 0) + 1;
+  });
+
+  const filtered = members.filter((m) => {
+    if (deptFilter !== "전체" && m.department !== deptFilter) return false;
+    if (search && !m.name.includes(search) && !(m.phone || "").includes(search)) return false;
+    return true;
+  });
+
+  // 부서별 그룹핑
+  const grouped: Record<string, ChurchMember[]> = {};
+  filtered.forEach((m) => {
+    const dept = m.department || "미분류";
+    if (!grouped[dept]) grouped[dept] = [];
+    grouped[dept].push(m);
+  });
 
   return (
-    <div className="px-5 pt-6">
+    <div className="px-5 pt-6 pb-8">
       <div className="mb-4">
         <Link href="/admin" className="text-sm text-mid-gray">← 관리</Link>
-        <h1 className="text-xl font-bold text-green-dark">성도 관리</h1>
-        <p className="text-mid-gray text-xs mt-0.5">총 {members.length}명</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-green-dark">성도 관리</h1>
+            <p className="text-mid-gray text-xs mt-0.5">전체 {members.length}명</p>
+          </div>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="px-4 py-2 bg-green text-white text-sm font-medium rounded-lg"
+          >
+            {showForm ? "닫기" : "+ 교인 추가"}
+          </button>
+        </div>
       </div>
 
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="이름 또는 이메일 검색..."
-        className="w-full px-4 py-2.5 bg-white border border-light-gray rounded-xl text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green"
-      />
+      {/* 교인 추가 폼 */}
+      {showForm && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
+          <input type="text" placeholder="이름 *" value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="text-xs text-mid-gray block mb-1">생년월일</label>
+              <input type="date" value={form.birth_date}
+                onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+                className="w-full px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+            </div>
+            <div className="w-24">
+              <label className="text-xs text-mid-gray block mb-1">성별</label>
+              <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}
+                className="w-full px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green">
+                <option value="">-</option>
+                <option value="male">남</option>
+                <option value="female">여</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input type="tel" placeholder="전화번호" value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              className="flex-1 px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+            <select value={form.relation} onChange={(e) => setForm({ ...form, relation: e.target.value })}
+              className="w-28 px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green">
+              <option>본인</option>
+              <option>배우자</option>
+              <option>자녀</option>
+              <option>부모</option>
+              <option>형제/자매</option>
+            </select>
+          </div>
+          <button onClick={handleAddMember} disabled={!form.name.trim()}
+            className="w-full py-2.5 bg-green text-white rounded-lg font-medium text-sm disabled:opacity-40">
+            추가
+          </button>
+        </div>
+      )}
 
-      {filtered.length === 0 ? (
+      {/* 부서 필터 */}
+      <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+        {DEPARTMENTS.map((d) => (
+          <button key={d}
+            onClick={() => setDeptFilter(d)}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition ${
+              deptFilter === d ? "bg-green text-white" : "bg-white text-mid-gray border border-light-gray"
+            }`}
+          >
+            {d} {d === "전체" ? members.length : (deptCounts[d] || 0)}
+          </button>
+        ))}
+      </div>
+
+      {/* 검색 */}
+      <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+        placeholder="이름 또는 전화번호 검색..."
+        className="w-full px-4 py-2.5 bg-white border border-light-gray rounded-xl text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-green" />
+
+      {/* 부서별 그룹 표시 */}
+      {Object.keys(grouped).length === 0 ? (
         <div className="text-center pt-8 bg-white rounded-xl p-6">
-          <p className="text-mid-gray text-sm">
-            {search ? "검색 결과가 없습니다." : "아직 교회에 소속된 성도가 없습니다."}
-          </p>
-          <p className="text-mid-gray text-xs mt-2">성도가 가입 신청 → 승인하면 여기 표시됩니다.</p>
-          <Link href="/admin/requests" className="inline-block mt-4 text-green text-sm font-medium">
-            가입 요청 확인 →
-          </Link>
+          <p className="text-mid-gray text-sm">{search ? "검색 결과가 없습니다." : "등록된 교인이 없습니다."}</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((m) => (
-            <div key={m.id} className="bg-white rounded-xl p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                    m.role === "pastor" ? "bg-gold text-charcoal" : "bg-green text-white"
-                  }`}>
-                    {(m.name || m.email || "?")[0]}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-medium text-sm text-charcoal">{m.name || m.email.split("@")[0]}</span>
-                      {m.role === "pastor" && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded-full font-medium">목회자</span>
-                      )}
-                      {m.rank && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-green/10 text-green rounded-full font-medium">{m.rank}</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-mid-gray">{m.phone || m.email}</p>
-                  </div>
-                </div>
-
-                {m.role === "member" && (
-                  <button
-                    onClick={() => togglePermission(m.id)}
-                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${
-                      permMap[m.id]
-                        ? "bg-green/10 text-green border border-green/30"
-                        : "bg-light-gray text-mid-gray"
-                    }`}
-                  >
-                    {permMap[m.id] ? "설교✓" : "설교승인"}
-                  </button>
-                )}
-              </div>
-
-              <button
-                onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
-                className="mt-2 text-xs text-mid-gray"
-              >
-                {expandedId === m.id ? "▲ 접기" : "▼ 상세정보"}
-              </button>
-
-              {expandedId === m.id && (
-                <div className="bg-cream rounded-xl p-3 mt-2 text-xs space-y-1">
-                  {m.birth_date && <p><b>생년월일:</b> {m.birth_date}</p>}
-                  {m.gender && <p><b>성별:</b> {GENDER[m.gender]}</p>}
-                  {m.marital_status && <p><b>결혼:</b> {MARITAL[m.marital_status]}</p>}
-                  {m.address && <p><b>주소:</b> {m.address}</p>}
-                  {m.baptism_date && <p><b>세례일:</b> {m.baptism_date}</p>}
-                  {m.registration_date && <p><b>등록일:</b> {m.registration_date}</p>}
-                  {m.district && <p><b>구역:</b> {m.district}</p>}
-                  {m.services && m.services.length > 0 && <p><b>봉사:</b> {m.services.join(", ")}</p>}
-                  {m.family && m.family.length > 0 && (
-                    <div>
-                      <b>가족:</b>
-                      <ul className="ml-3 mt-1">
-                        {m.family.map((f, i) => (
-                          <li key={i}>- {f.relation}: {f.name}{f.birth_date ? ` (${f.birth_date})` : ""}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
+        Object.entries(grouped).map(([dept, list]) => (
+          <div key={dept} className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h3 className="text-sm font-bold text-green-dark">{dept}</h3>
+              <span className="text-xs text-mid-gray">{list.length}명</span>
             </div>
-          ))}
-        </div>
+            <div className="bg-white rounded-xl shadow-sm divide-y divide-light-gray/50">
+              {list.map((m) => {
+                const age = getAge(m.birth_date);
+                return (
+                  <div key={m.id} className="px-4 py-3 flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold ${
+                      m.profile_id ? "bg-green text-white" : "bg-light-gray text-mid-gray"
+                    }`}>
+                      {m.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-medium text-sm text-charcoal">{m.name}</span>
+                        {m.grade && <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded-full">{m.grade}</span>}
+                        {m.relation && m.relation !== "본인" && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-cream text-mid-gray rounded-full">{m.relation}</span>
+                        )}
+                        {m.profile_id && <span className="text-[10px] text-green">앱</span>}
+                      </div>
+                      <p className="text-xs text-mid-gray">
+                        {[
+                          m.gender ? GENDER[m.gender] : null,
+                          age !== null ? `${age}세` : null,
+                          m.phone,
+                        ].filter(Boolean).join(" · ") || "정보 없음"}
+                      </p>
+                    </div>
+                    <button onClick={() => handleToggleActive(m.id)} className="text-xs text-mid-gray hover:text-red-500">
+                      제거
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
