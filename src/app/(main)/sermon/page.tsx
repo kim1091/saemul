@@ -66,6 +66,16 @@ export default function SermonListPage() {
         </Link>
       </div>
 
+      {/* 보조 도구 */}
+      <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide">
+        <Link href="/sermon/calendar" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
+          📅 절기달력
+        </Link>
+        <Link href="/sermon/checklist" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
+          ✅ 체크리스트
+        </Link>
+      </div>
+
       {/* 탭: 내 설교 / 목회자 설교 */}
       <div className="flex bg-white rounded-xl p-1 mb-4 shadow-sm">
         <button
