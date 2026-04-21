@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase";
 
 type Mode = "quick" | "workshop";
 type Step = "input" | "generating" | "result";
@@ -123,12 +124,36 @@ export default function SermonCreatePage() {
       });
 
       const data2 = await res2.json();
+      let finalSermon: string;
       if (data2.error) {
-        // 1단계는 성공했으므로 전반부만이라도 보여주기
-        setFullSermon(data1.sermon);
+        finalSermon = data1.sermon;
         setError("후반부 생성 실패. 전반부만 표시됩니다: " + data2.error);
       } else {
-        setFullSermon(data1.sermon + "\n\n" + data2.sermon);
+        finalSermon = data1.sermon + "\n\n" + data2.sermon;
+      }
+
+      setFullSermon(finalSermon);
+
+      // DB에 설교 저장
+      try {
+        const supabase = createClient();
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          await supabase.from("sermons").insert({
+            user_id: currentUser.id,
+            passage: passage || memo.slice(0, 100),
+            memo: memo || "",
+            audience,
+            length: length + "분",
+            sermon_text: finalSermon,
+            sermon_type: "full",
+            duration_minutes: parseInt(length),
+            content: finalSermon,
+            title: passage || "설교공방 설교",
+          });
+        }
+      } catch {
+        // 저장 실패해도 결과는 보여주기
       }
 
       setStep("result");

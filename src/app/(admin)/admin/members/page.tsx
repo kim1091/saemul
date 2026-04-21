@@ -61,7 +61,8 @@ export default function MembersPage() {
       .single();
     setIsPastor(church?.pastor_id === user.id);
 
-    const { data } = await supabase
+    // is_partner 컬럼 존재 여부에 따라 안전하게 쿼리
+    const { data, error: queryErr } = await supabase
       .from("church_members")
       .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active, is_partner")
       .eq("church_id", profile.church_id)
@@ -69,7 +70,19 @@ export default function MembersPage() {
       .order("department")
       .order("name");
 
-    setMembers(data || []);
+    if (queryErr) {
+      // is_partner 컬럼이 아직 없는 경우 폴백
+      const { data: fallback } = await supabase
+        .from("church_members")
+        .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active")
+        .eq("church_id", profile.church_id)
+        .eq("is_active", true)
+        .order("department")
+        .order("name");
+      setMembers((fallback || []).map(m => ({ ...m, is_partner: false })));
+    } else {
+      setMembers(data || []);
+    }
     setLoading(false);
   }
 

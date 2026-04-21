@@ -32,18 +32,22 @@ export async function requireAdminAccess() {
     return { userId: user.id, role: profile.role, churchId: profile.church_id };
   }
 
-  // 2차: 파트너 여부 확인
-  const { data: partner } = await supabase
-    .from("church_members")
-    .select("is_partner")
-    .eq("profile_id", user.id)
-    .eq("church_id", profile.church_id)
-    .eq("is_partner", true)
-    .eq("is_active", true)
-    .maybeSingle();
+  // 2차: 파트너 여부 확인 (is_partner 컬럼 미존재 시 안전하게 스킵)
+  try {
+    const { data: partner } = await supabase
+      .from("church_members")
+      .select("is_partner")
+      .eq("profile_id", user.id)
+      .eq("church_id", profile.church_id)
+      .eq("is_partner", true)
+      .eq("is_active", true)
+      .maybeSingle();
 
-  if (partner) {
-    return { userId: user.id, role: "partner" as const, churchId: profile.church_id };
+    if (partner) {
+      return { userId: user.id, role: "partner" as const, churchId: profile.church_id };
+    }
+  } catch {
+    // is_partner 컬럼이 아직 없으면 파트너 기능 비활성 (목회자만 접근 가능)
   }
 
   // 권한 없음 → 홈으로
