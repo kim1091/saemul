@@ -7,10 +7,11 @@ import { createClient } from "@/lib/supabase";
 interface Sermon {
   id: string;
   title: string | null;
-  book: string;
-  chapter: number;
-  verse_start: number;
-  verse_end: number;
+  book: string | null;
+  chapter: number | null;
+  verse_start: number | null;
+  verse_end: number | null;
+  passage: string | null;
   sermon_type: string;
   duration_minutes: number;
   created_at: string;
@@ -37,7 +38,7 @@ export default function SermonListPage() {
 
     let query = supabase
       .from("sermons")
-      .select("id, title, book, chapter, verse_start, verse_end, sermon_type, duration_minutes, created_at, user_id")
+      .select("id, title, book, chapter, verse_start, verse_end, passage, sermon_type, duration_minutes, created_at, user_id")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -121,7 +122,9 @@ export default function SermonListPage() {
                     {s.duration_minutes}분
                   </span>
                   <span className="text-xs text-mid-gray">
-                    {s.book} {s.chapter}:{s.verse_start}-{s.verse_end}
+                    {s.book
+                      ? `${s.book} ${s.chapter}:${s.verse_start}-${s.verse_end}`
+                      : s.passage || ""}
                   </span>
                 </div>
                 <h3 className="font-bold text-charcoal">{s.title || "제목 없음"}</h3>
