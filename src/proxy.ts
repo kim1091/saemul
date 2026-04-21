@@ -65,15 +65,26 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
-  // 온보딩 완료 여부 확인
+  // 온보딩 완료 여부 + 역할 확인
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarded")
+    .select("onboarded, role, church_id")
     .eq("id", user.id)
     .single();
 
   if (!profile || !profile.onboarded) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
+  }
+
+  // /admin 경로: 목회자/admin만 1차 통과 (파트너는 layout에서 DB 확인)
+  if (pathname.startsWith("/admin")) {
+    if (profile.role !== "pastor" && profile.role !== "admin") {
+      // 파트너 여부는 church_members 조회 필요 → 여기서는 church_id 유무만 확인
+      if (!profile.church_id) {
+        return NextResponse.redirect(new URL("/home", request.url));
+      }
+      // church_id가 있으면 layout의 requireAdminAccess()가 정밀 검사
+    }
   }
 
   return supabaseResponse;

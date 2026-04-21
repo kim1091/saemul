@@ -16,6 +16,7 @@ interface ChurchMember {
   profile_id: string | null;
   registered_by: string | null;
   is_active: boolean;
+  is_partner: boolean;
 }
 
 const DEPARTMENTS = ["전체", "가족별", "장년부", "청년부", "고등부", "중등부", "아동부", "유치부"];
@@ -36,6 +37,7 @@ export default function MembersPage() {
   // 수정 모드
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "" });
+  const [isPastor, setIsPastor] = useState(false);
 
   const supabase = createClient();
 
@@ -51,9 +53,17 @@ export default function MembersPage() {
     if (!profile?.church_id) { setLoading(false); return; }
     setChurchId(profile.church_id);
 
+    // 목회자 여부 확인 (파트너 지정 권한)
+    const { data: church } = await supabase
+      .from("churches")
+      .select("pastor_id")
+      .eq("id", profile.church_id)
+      .single();
+    setIsPastor(church?.pastor_id === user.id);
+
     const { data } = await supabase
       .from("church_members")
-      .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active")
+      .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active, is_partner")
       .eq("church_id", profile.church_id)
       .eq("is_active", true)
       .order("department")
@@ -102,6 +112,15 @@ export default function MembersPage() {
     }).eq("id", editingId);
     if (error) { alert("수정 실패: " + error.message); return; }
     setEditingId(null);
+    loadData();
+  }
+
+  async function handleTogglePartner(m: ChurchMember) {
+    if (!m.profile_id) { alert("앱에 가입한 성도만 파트너로 지정할 수 있습니다."); return; }
+    const action = m.is_partner ? "파트너 해제" : "파트너 지정";
+    if (!confirm(`${m.name}님을 ${action}할까요?\n파트너는 교회 관리 메뉴에 접근할 수 있습니다.`)) return;
+    const { error } = await supabase.from("church_members").update({ is_partner: !m.is_partner }).eq("id", m.id);
+    if (error) { alert(action + " 실패: " + error.message); return; }
     loadData();
   }
 
@@ -309,7 +328,8 @@ export default function MembersPage() {
                             {m.relation && m.relation !== "본인" && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-cream text-mid-gray rounded-full">{m.relation}</span>
                             )}
-                            {m.profile_id && <span className="text-[10px] text-green">앱</span>}
+                            {m.is_partner && <span className="text-[10px] px-1.5 py-0.5 bg-green/20 text-green rounded-full font-bold">파트너</span>}
+                            {m.profile_id && !m.is_partner && <span className="text-[10px] text-green">앱</span>}
                           </div>
                           <p className="text-xs text-mid-gray">
                             {[
@@ -319,6 +339,12 @@ export default function MembersPage() {
                             ].filter(Boolean).join(" · ") || "정보 없음"}
                           </p>
                         </div>
+                        {isPastor && m.profile_id && m.relation === "본인" && (
+                          <button onClick={() => handleTogglePartner(m)}
+                            className={`text-xs mr-1 ${m.is_partner ? "text-gold hover:text-red-400" : "text-mid-gray hover:text-green"}`}>
+                            {m.is_partner ? "해제" : "파트너"}
+                          </button>
+                        )}
                         <button onClick={() => startEdit(m)} className="text-xs text-green hover:text-green-dark mr-1">수정</button>
                         <button onClick={() => handleToggleActive(m.id)} className="text-xs text-mid-gray hover:text-red-500">제거</button>
                       </div>
