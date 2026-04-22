@@ -182,24 +182,28 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 가입 신청
-      const snapshot = { name, phone, rank, services, baptism_date: baptismDate, registration_date: registrationDate };
+      // 교회 가입 신청 (교회를 선택한 경우만)
+      if (selectedChurchId && selectedChurchId !== "skip") {
+        const snapshot = { name, phone, rank, services, baptism_date: baptismDate, registration_date: registrationDate };
 
-      const { error: jrErr } = await supabase.from("join_requests").insert({
-        church_id: selectedChurchId,
-        user_id: user.id,
-        status: "pending",
-        snapshot,
-      });
+        const { error: jrErr } = await supabase.from("join_requests").insert({
+          church_id: selectedChurchId,
+          user_id: user.id,
+          status: "pending",
+          snapshot,
+        });
 
-      if (jrErr?.code === "23505") {
-        setMessage(`이미 "${selectedChurchName}"에 가입 요청을 보냈습니다.`);
-      } else if (jrErr) {
-        setMessage("교회 가입 신청에 실패했습니다: " + jrErr.message);
-        setLoading(false);
-        return;
+        if (jrErr?.code === "23505") {
+          setMessage(`이미 "${selectedChurchName}"에 가입 요청을 보냈습니다.`);
+        } else if (jrErr) {
+          setMessage("교회 가입 신청에 실패했습니다: " + jrErr.message);
+          setLoading(false);
+          return;
+        } else {
+          setMessage(`"${selectedChurchName}"에 가입 신청 완료! 목사님 승인을 기다려주세요.`);
+        }
       } else {
-        setMessage(`"${selectedChurchName}"에 가입 신청 완료! 목사님 승인을 기다려주세요.`);
+        setMessage("가입이 완료되었습니다! 나중에 교회에 가입할 수 있습니다.");
       }
 
       setTimeout(() => router.push("/home"), 2000);
@@ -281,6 +285,12 @@ export default function OnboardingPage() {
                 {c.address && <p className="text-xs text-mid-gray mt-0.5">{c.address}</p>}
               </button>
             ))}
+            {churchSearch.trim().length >= 2 && churches.length === 0 && (
+              <div className="text-center py-4">
+                <p className="text-mid-gray text-sm">검색 결과가 없습니다</p>
+                <p className="text-xs text-mid-gray mt-1">아직 목회자가 교회를 등록하지 않았을 수 있습니다</p>
+              </div>
+            )}
           </div>
 
           {selectedChurchId && (
@@ -289,6 +299,15 @@ export default function OnboardingPage() {
                 <span className="text-green font-bold">{selectedChurchName}</span> 선택됨
               </p>
             </div>
+          )}
+
+          {!selectedChurchId && (
+            <button
+              onClick={() => { setSelectedChurchId("skip"); setSelectedChurchName(""); }}
+              className="w-full mt-4 py-2.5 text-sm text-mid-gray underline"
+            >
+              교회 없이 시작하기 (나중에 가입 가능)
+            </button>
           )}
         </div>
       )}
