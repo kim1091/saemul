@@ -23,6 +23,7 @@ export default function SermonListPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"mine" | "pastor">("mine");
   const [userId, setUserId] = useState<string | null>(null);
+  const [role, setRole] = useState<string>("member");
 
   const supabase = createClient();
 
@@ -30,11 +31,18 @@ export default function SermonListPage() {
     loadSermons();
   }, [tab]);
 
+  const isPastor = role === "pastor" || role === "admin";
+
   async function loadSermons() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) setUserId(user.id);
     if (!user) { setLoading(false); return; }
+
+    // 역할 확인
+    const { data: profile } = await supabase
+      .from("profiles").select("role").eq("id", user.id).single();
+    if (profile?.role) setRole(profile.role);
 
     let query = supabase
       .from("sermons")
@@ -66,15 +74,20 @@ export default function SermonListPage() {
         </Link>
       </div>
 
-      {/* 보조 도구 */}
-      <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide">
-        <Link href="/sermon/calendar" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
-          📅 절기달력
-        </Link>
-        <Link href="/sermon/checklist" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
-          ✅ 체크리스트
-        </Link>
-      </div>
+      {/* 보조 도구 (목회자만) */}
+      {isPastor && (
+        <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide">
+          <Link href="/sermon/calendar" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
+            📅 절기달력
+          </Link>
+          <Link href="/sermon/checklist" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
+            ✅ 체크리스트
+          </Link>
+          <Link href="/sermon/tools" className="shrink-0 px-3 py-2 bg-white border border-light-gray rounded-lg text-xs font-medium text-mid-gray hover:border-green hover:text-green transition">
+            🛠️ 주보·시리즈
+          </Link>
+        </div>
+      )}
 
       {/* 탭: 내 설교 / 목회자 설교 */}
       <div className="flex bg-white rounded-xl p-1 mb-4 shadow-sm">

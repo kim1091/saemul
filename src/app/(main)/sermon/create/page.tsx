@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 
@@ -8,6 +8,24 @@ type Mode = "quick" | "workshop";
 type Step = "input" | "generating" | "result";
 
 export default function SermonCreatePage() {
+  // 역할 확인
+  const [role, setRole] = useState<string>("member");
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from("profiles").select("role").eq("id", user.id).single()
+        .then(({ data }) => {
+          if (data?.role) setRole(data.role);
+          setRoleLoaded(true);
+        });
+    });
+  }, []);
+
+  const isPastor = role === "pastor" || role === "admin";
+
   // 모드 & 단계
   const [mode, setMode] = useState<Mode>("quick");
   const [step, setStep] = useState<Step>("input");
@@ -288,29 +306,35 @@ export default function SermonCreatePage() {
     <div className="px-5 pt-6 pb-8">
       <h1 className="text-xl font-bold text-green-dark mb-5">설교 만들기</h1>
 
-      {/* 모드 선택 */}
-      <div className="flex gap-3 mb-5">
-        <button
-          onClick={() => setMode("quick")}
-          className={`flex-1 p-4 rounded-xl border-2 transition ${
-            mode === "quick" ? "border-green bg-green/5" : "border-light-gray bg-white"
-          }`}
-        >
-          <p className="text-2xl mb-1">⚡</p>
-          <p className={`font-bold text-sm ${mode === "quick" ? "text-green" : "text-charcoal"}`}>5분 설교</p>
-          <p className="text-xs text-mid-gray mt-0.5">구역/신우회용</p>
-        </button>
-        <button
-          onClick={() => setMode("workshop")}
-          className={`flex-1 p-4 rounded-xl border-2 transition ${
-            mode === "workshop" ? "border-green bg-green/5" : "border-light-gray bg-white"
-          }`}
-        >
-          <p className="text-2xl mb-1">🔨</p>
-          <p className={`font-bold text-sm ${mode === "workshop" ? "text-green" : "text-charcoal"}`}>설교 공방</p>
-          <p className="text-xs text-mid-gray mt-0.5">본격 설교 제작</p>
-        </button>
-      </div>
+      {/* 모드 선택 (목회자만 설교공방 표시) */}
+      {isPastor ? (
+        <div className="flex gap-3 mb-5">
+          <button
+            onClick={() => setMode("quick")}
+            className={`flex-1 p-4 rounded-xl border-2 transition ${
+              mode === "quick" ? "border-green bg-green/5" : "border-light-gray bg-white"
+            }`}
+          >
+            <p className="text-2xl mb-1">⚡</p>
+            <p className={`font-bold text-sm ${mode === "quick" ? "text-green" : "text-charcoal"}`}>5분 설교</p>
+            <p className="text-xs text-mid-gray mt-0.5">구역/신우회용</p>
+          </button>
+          <button
+            onClick={() => setMode("workshop")}
+            className={`flex-1 p-4 rounded-xl border-2 transition ${
+              mode === "workshop" ? "border-green bg-green/5" : "border-light-gray bg-white"
+            }`}
+          >
+            <p className="text-2xl mb-1">🔨</p>
+            <p className={`font-bold text-sm ${mode === "workshop" ? "text-green" : "text-charcoal"}`}>설교 공방</p>
+            <p className="text-xs text-mid-gray mt-0.5">본격 설교 제작</p>
+          </button>
+        </div>
+      ) : (
+        <div className="bg-gold/10 border border-gold/30 rounded-xl p-3 mb-5">
+          <p className="text-gold text-sm font-medium">5분 나눔 설교를 만들어보세요</p>
+        </div>
+      )}
 
       {/* ━━ Quick 모드 입력 ━━ */}
       {mode === "quick" && (
