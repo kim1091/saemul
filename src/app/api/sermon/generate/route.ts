@@ -32,12 +32,21 @@ async function searchIllustrations(passage: string, memo: string): Promise<strin
 // ═══ 예화 원칙 (모든 방법론 공통) ═══
 const ILLUS_RULES = `
 
-## 예화 원칙
-1. AI가 지어낸 이야기 절대 금지. 위 '참고 자료' 우선 활용.
-2. 출처 확신 없으면 "[설교자 예화 삽입]"으로 빈칸 남기고 (AI 제안)으로 대안 제시.
-3. 모든 예화에 각주 필수: ¹ 저자, 『도서명』(출판사, 연도) / ² 「기사 제목」, 매체명, 날짜
-4. "제가 아는 한 목사님" 같은 모호한 가짜 인물 절대 금지
-5. 예화 소재 가족 편중 금지`;
+## 예화 원칙 (절대 규칙)
+1. **AI가 지어낸 이야기·인물·사건 절대 금지. 위반 시 설교 전체가 무효.**
+2. 허용되는 예화 출처만 사용:
+   - 위 '참고 자료'에서 검색된 실제 기사/도서 (최우선)
+   - 널리 알려진 역사적 사실 (출처 명시 가능한 것만)
+   - 설교자 본인 경험 → "[설교자 경험]"으로 표시
+3. 출처를 확신할 수 없는 예화는 절대 쓰지 마라. 대신:
+   → "[설교자 예화 삽입 — 주제: ○○에 관한 경험]"으로 빈칸을 남겨라.
+4. **모든 예화에 각주 필수**:
+   ¹ 저자, 『도서명』(출판사, 연도), pp.XX
+   ² 「기사 제목」, 매체명, YYYY.MM.DD, URL
+   ³ 설교자 개인 경험
+5. "제가 아는 한 목사님/선교사님" 같은 모호한 가짜 인물 절대 금지
+6. 예화 소재 가족 편중 금지 — 직장·역사·사회·자연·문화 다양하게
+7. 참고 자료가 없으면 예화 자체를 쓰지 말고 빈칸("[설교자 예화]")으로 남겨라`;
 
 // ── 5분 나눔용 프롬프트 (기존 유지) ──
 const QUICK_SERMON_PROMPT = `당신은 경험 많은 설교 작성 도우미입니다.
@@ -432,8 +441,15 @@ async function handleWorkshopSermon(
     }
 
   } else {
-    // ━━ 기본 설교공방 (기존 로직 유지 + 웹 검색/각주 추가) ━━
-    systemPrompt = WORKSHOP_SYSTEM + (hasPoints ? " 설교자가 직접 정한 대지를 반드시 존중하세요." : "") + ILLUS_RULES;
+    // ━━ 연역적/귀납적/내러티브/강해/기본 ━━
+    const structureInstructions: Record<string, string> = {
+      deductive: "\n\n## 설교 구조: 연역적\n결론(Big Idea)을 서론에서 먼저 선언하고, 본문·예화·적용으로 증명한 뒤 결단으로 마무리하라.",
+      inductive: "\n\n## 설교 구조: 귀납적\n질문·문제·현상에서 출발하여 본문을 탐구하며, 결론(Big Idea)은 설교 후반부에 드러내라. 청중이 스스로 발견하게 이끌라.",
+      narrative: "\n\n## 설교 구조: 내러티브\n이야기 흐름으로 전개하라. 발단→전개→위기→절정→결말 구조. 절정에서 핵심 진리(Big Idea)를 드러내고, 청중이 이야기 속에 자신을 대입하게 하라.",
+      textual: "\n\n## 설교 구조: 강해\n본문의 순서를 그대로 따라 단락별로 해설하고 적용하라. 각 단락의 핵심을 Big Idea와 연결하라.",
+    };
+    const structureNote = structureInstructions[structure] || "";
+    systemPrompt = WORKSHOP_SYSTEM + (hasPoints ? " 설교자가 직접 정한 대지를 반드시 존중하세요." : "") + structureNote + ILLUS_RULES;
     prompt = basePrompt + searchContext;
 
     if (stage === 2 && firstHalf) {

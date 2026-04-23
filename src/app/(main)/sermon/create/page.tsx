@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase";
 
 type Mode = "quick" | "workshop";
 type Step = "input" | "generating" | "result";
-type Structure = "default" | "onepoint" | "fourpage";
+type Structure = "deductive" | "inductive" | "narrative" | "textual" | "onepoint" | "fourpage";
 
 export default function SermonCreatePage() {
   // 역할 확인
@@ -39,7 +39,7 @@ export default function SermonCreatePage() {
   const [tone, setTone] = useState("");
 
   // 설교 방법론
-  const [structure, setStructure] = useState<Structure>("default");
+  const [structure, setStructure] = useState<Structure>("deductive");
 
   // 대지 (설교공방)
   const [point1, setPoint1] = useState("");
@@ -368,12 +368,15 @@ export default function SermonCreatePage() {
       {/* ━━ Workshop 모드 입력 ━━ */}
       {mode === "workshop" && (
         <>
-          {/* 설교 방법론 선택 */}
+          {/* 설교 방법론 선택 (6종) */}
           <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
             <h3 className="font-bold text-charcoal mb-3">설교 방법론</h3>
             <div className="grid grid-cols-3 gap-2">
               {([
-                { key: "default" as Structure, icon: "🎤", label: "설교공방", desc: "본격 설교" },
+                { key: "deductive" as Structure, icon: "📐", label: "연역적", desc: "결론→증명" },
+                { key: "inductive" as Structure, icon: "🔍", label: "귀납적", desc: "문제→결론" },
+                { key: "narrative" as Structure, icon: "📕", label: "내러티브", desc: "이야기 전개" },
+                { key: "textual" as Structure, icon: "📜", label: "강해", desc: "본문 순서" },
                 { key: "onepoint" as Structure, icon: "🎯", label: "원포인트", desc: "하나의 메시지" },
                 { key: "fourpage" as Structure, icon: "📖", label: "네페이지", desc: "문제→은혜" },
               ]).map((m) => (
@@ -385,14 +388,16 @@ export default function SermonCreatePage() {
                 </button>
               ))}
             </div>
-            {structure !== "default" && (
-              <div className="mt-3 bg-green/5 border border-green/20 rounded-lg p-3">
-                <p className="text-xs text-green-dark leading-5">
-                  {structure === "onepoint" && "🎯 본문에서 단 하나의 핵심 진리를 추출, Head(이해)·Heart(감동)·Hand(실천) 세 각도로 회중의 심장에 각인시킵니다."}
-                  {structure === "fourpage" && "📖 Paul Scott Wilson — 본문 속 문제 → 삶 속 문제 → 전환점 → 본문 속 은혜 → 삶 속 은혜. 구조 자체가 복음입니다."}
-                </p>
-              </div>
-            )}
+            <div className="mt-3 bg-green/5 border border-green/20 rounded-lg p-3">
+              <p className="text-xs text-green-dark leading-5">
+                {structure === "deductive" && "📐 결론(Big Idea)을 먼저 선언하고, 본문과 예화로 증명한 뒤 적용합니다."}
+                {structure === "inductive" && "🔍 질문과 문제에서 출발하여 본문을 탐구하며 결론으로 이끕니다."}
+                {structure === "narrative" && "📕 이야기 흐름으로 전개하며, 절정에서 핵심 진리를 드러냅니다."}
+                {structure === "textual" && "📜 본문의 순서를 따라 단락별로 해설하고 적용합니다."}
+                {structure === "onepoint" && "🎯 본문에서 단 하나의 핵심 진리를 추출, Head(이해)·Heart(감동)·Hand(실천) 세 각도로 각인시킵니다."}
+                {structure === "fourpage" && "📖 Paul Scott Wilson — 본문 속 문제 → 삶 속 문제 → 전환점 → 본문 속 은혜 → 삶 속 은혜. 구조 자체가 복음입니다."}
+              </p>
+            </div>
           </div>
 
           {/* 기본 정보 */}
