@@ -2,6 +2,43 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient, createServiceRoleClient } from "@/lib/supabase-server";
 
+// ═══ 웹 검색 (Tavily) ═══
+async function searchIllustrations(passage: string, memo: string): Promise<string> {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return "";
+  const queries: string[] = [];
+  if (passage) queries.push(passage + " 설교 예화 실화 간증");
+  if (memo) queries.push(memo + " 기독교 실화 사례 뉴스");
+  if (queries.length === 0) return "";
+
+  let all: Array<{ title?: string; url: string; content?: string }> = [];
+  for (const q of queries.slice(0, 2)) {
+    try {
+      const r = await fetch("https://api.tavily.com/search", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: key, query: q, search_depth: "basic", max_results: 3, include_answer: false, include_raw_content: false }),
+      });
+      if (r.ok) { const d = await r.json(); if (d.results) all.push(...d.results); }
+    } catch (e: unknown) { console.warn("Search failed:", q, e instanceof Error ? e.message : e); }
+  }
+  if (all.length === 0) return "";
+  const seen = new Set<string>();
+  const uniq = all.filter(r => { if (seen.has(r.url)) return false; seen.add(r.url); return true; }).slice(0, 6);
+  let s = "\n\n## 예화 참고 자료 (실제 웹 검색 결과)\n아래는 실제 웹에서 검색한 자료입니다. 예화 작성 시 이 자료를 **우선 활용**하고, 각주에 출처를 명시하세요.\n\n";
+  uniq.forEach((r, i) => { s += `### 자료 ${i + 1}: ${r.title || ""}\n- URL: ${r.url}\n${r.content ? "- 내용: " + r.content.slice(0, 400) + "\n" : ""}\n`; });
+  return s;
+}
+
+// ═══ 예화 원칙 (모든 방법론 공통) ═══
+const ILLUS_RULES = `
+
+## 예화 원칙
+1. AI가 지어낸 이야기 절대 금지. 위 '참고 자료' 우선 활용.
+2. 출처 확신 없으면 "[설교자 예화 삽입]"으로 빈칸 남기고 (AI 제안)으로 대안 제시.
+3. 모든 예화에 각주 필수: ¹ 저자, 『도서명』(출판사, 연도) / ² 「기사 제목」, 매체명, 날짜
+4. "제가 아는 한 목사님" 같은 모호한 가짜 인물 절대 금지
+5. 예화 소재 가족 편중 금지`;
+
 // ── 5분 나눔용 프롬프트 (기존 유지) ──
 const QUICK_SERMON_PROMPT = `당신은 경험 많은 설교 작성 도우미입니다.
 주어진 성경 본문으로 5분 분량(약 800-1000자)의 짧은 나눔/설교를 작성해주세요.
@@ -44,6 +81,40 @@ const WORKSHOP_SYSTEM = `당신은 20년 경력의 한국 교회 설교자입니
 
 ## 출력 형식
 설교단에서 바로 낭독할 수 있는 완전 원고. 마크다운 제목(#, ##)으로 구분.`;
+
+// ── 원포인트 시스템 프롬프트 ──
+const ONEPOINT_SYSTEM = `당신은 20년 경력의 한국 교회 설교자입니다. **원포인트 설교**를 작성합니다.
+
+## 원포인트 설교
+본문에서 **단 하나의 핵심 진리**만 추출, Head(이해)·Heart(감동)·Hand(실천) 세 각도로 비추어 각인시키는 방법론.
+
+## 원칙
+1. 하나만 말하라 — Big Idea가 곧 대지이자 결론
+2. 핵심 문장 3~4회 반복, 매번 다른 표현
+3. 감정 곡선: 도입(호기심) → Head(경이) → Heart(아픔) → Hand(도전) → 대속사(감동) → 착지(결단) → 파송(평안)
+
+## 금지: 대지 2개 이상, 가짜 예화, 동어반복, 출처 날조, 대속사 추상 진술
+
+## 출력: 낭독용 완전 원고. 마크다운(#, ##) 구분.`;
+
+// ── 네페이지 시스템 프롬프트 ──
+const FOURPAGE_SYSTEM = `당신은 20년 경력의 한국 교회 설교자입니다. **네페이지 설교(Four-Page Sermon)**를 작성합니다.
+
+## 네페이지 설교 (Paul Scott Wilson)
+Page1: 본문 속 문제 → Page2: 삶 속 문제 → 전환점 → Page3: 본문 속 은혜 → Page4: 삶 속 은혜
+
+## 원칙
+1. 각 페이지 ~25% 균형
+2. 전환점(The Turn) — 최소 3~5문장, 가장 공들여 쓰라
+3. 은혜 > 문제
+4. Page2↔4 거울 — 같은 장면, 다른 눈
+
+## 감정 곡선
+도입(호기심) → P1(긴장) → P2(아픔) → Turn(고요→경이) → P3(감동) → P4(소망) → 파송(평안)
+
+## 금지: 대지 나열, P1·2에서 해결책, 전환점 한 줄, 가짜 예화, P4에서 P2와 다른 새 상황
+
+## 출력: 낭독용 완전 원고. ## Page 1 등으로 구분.`;
 
 // ── 아이스브레이커 스타일 7종 ──
 const ALL_ICEBREAKERS = [
@@ -312,58 +383,73 @@ async function handleWorkshopSermon(
   const length = ALLOWED_LENGTHS.includes(String(body.length)) ? String(body.length) : "25";
 
   const { worship, season } = memo ? detectFromMemo(memo) : { worship: "", season: "" };
+  const structure = typeof body.structure === "string" ? body.structure : "default";
 
-  const { prompt, appStyle, hasPoints, numPoints } = buildWorkshopPrompt({
+  // 웹 검색 (1단계에서만)
+  const stage = (body.stage as number) || 1;
+  const firstHalf = (body.firstHalf as string) || "";
+  const searchContext = stage === 1 ? await searchIllustrations(passage, memo) : "";
+
+  const { prompt: basePrompt, appStyle, hasPoints, numPoints } = buildWorkshopPrompt({
     passage, audience, length, memo, point1, point2, point3, tone, worship, season,
   });
 
-  const stage = (body.stage as number) || 1;
-  const firstHalf = (body.firstHalf as string) || "";
+  // 방법론별 프롬프트 + 시스템 프롬프트 결정
+  const iceStyle = pickRandom(ALL_ICEBREAKERS.filter(i => !i.exclude.includes(worship)) || ALL_ICEBREAKERS).style;
+  const appPick = pickRandom(APPLICATIONS);
 
-  // 메시지 구성
+  let systemPrompt: string;
+  let prompt: string;
   let messages: Anthropic.MessageParam[];
-  if (stage === 2 && firstHalf) {
-    messages = [
-      { role: "user", content: prompt },
-      { role: "assistant", content: firstHalf },
-      { role: "user", content: `위 설교문의 전반부를 이어서 후반부를 작성해 주세요. 다음 순서대로 이어가세요:
 
-1. [호흡·쉼] - 창의적인 침묵 유도
-2. [대속사 - 십자가 연결] - 이 본문만의 고유한 복음 연결. **클라이맥스 문장은 감각적 장면으로 그려라.**
-3. [결론 & 적용] - ${appStyle}
-4. [결단 기도문] - Big Idea와 직결된 구체적 기도 7~10문장
-5. [축도·파송] - 본문의 언어를 사용한 축복
-6. [부록] - 찬양 추천 (설교 전 2~3곡 + 설교 후 1~2곡, 번호 불확실하면 곡명만) + 소그룹 나눔 질문 4~5개
+  if (structure === "onepoint") {
+    // ━━ 원포인트 ━━
+    systemPrompt = ONEPOINT_SYSTEM + ILLUS_RULES;
+    const corePoint = point1 || "";
+    prompt = `## 기본 정보\n${passage ? "- 성경 본문: " + passage : "- 본문 자동 선정"}\n- 청중: ${audience}\n- 목표: ${length}분${worship ? "\n- 예배: " + worship : ""}${season ? "\n- 절기: " + season : ""}${memo ? "\n- 설교자 메모: " + memo : ""}` +
+      (corePoint ? `\n\n## 설교자가 정한 핵심 진리\n> "${corePoint}"` : "") + searchContext +
+      `\n\n## 원포인트 구조\n### [Big Idea]\n${corePoint ? "위 핵심 진리를 Big Idea로." : "단 하나의 핵심 진리 제시."}\n### [도입] 2~3분\n${iceStyle}\n"오늘 이것 하나만 말씀드리겠습니다." 본문 낭독.\n### [핵심 선언] 1분\nBig Idea 정면 선포.\n### [각도① Head] ~20%\n본문 배경 핵심 1개. 🔁 1차 반복(발견 톤)\n### [각도② Heart] ~20%\n삶의 장면. 예화(참고 자료+각주). 청중 저항. 🔁 2차 반복(위로 톤)\n### [각도③ Hand] ~20%\n변화·초대. 보조 성경 1절. 🔁 3차 반복(도전 톤)\n### [대속사] 2~3분\n십자가 연결. 감각적 클라이맥스.\n### [착지] 2~3분\n${appPick} "이것 하나만" 실천 1가지. 🔁 최종 반복(선포 톤)\n### [결단 기도문] 5~7문장\n### [파송 축복]\n### [부록] 찬양 + 소그룹 질문 3개`;
 
-**전반부의 Big Idea, FCF, 톤, 감정 흐름을 이어가세요.**
-**감정 곡선: 호흡(고요) → 대속사(감동/울컥) → 결론(결단/소망) → 축도(평안)으로 흘러가세요.**
-**반드시 축도·파송과 부록(찬양+나눔질문)까지 완성하세요.**` },
-    ];
+    if (stage === 2 && firstHalf) {
+      messages = [{ role: "user", content: prompt }, { role: "assistant", content: firstHalf },
+        { role: "user", content: `후반부: 대속사(감각적 클라이맥스) → 착지(${appPick} 🔁최종 반복) → 기도문 → 파송 → 부록. **부록까지 완성.**` }];
+    } else {
+      messages = [{ role: "user", content: prompt + "\n\n**[1단계] Big Idea, 도입, 핵심 선언, 각도①②③까지만. 핵심 문장 3회 반복 확인. 완전한 문장으로 마무리.**" }];
+    }
+
+  } else if (structure === "fourpage") {
+    // ━━ 네페이지 ━━
+    systemPrompt = FOURPAGE_SYSTEM + ILLUS_RULES;
+    prompt = `## 기본 정보\n${passage ? "- 성경 본문: " + passage : "- 본문 자동 선정"}\n- 청중: ${audience}\n- 목표: ${length}분${worship ? "\n- 예배: " + worship : ""}${season ? "\n- 절기: " + season : ""}${memo ? "\n- 설교자 메모: " + memo : ""}` +
+      (point1 ? `\n\n## 설교자 방향\n- 문제(Trouble): ${point1}` : "") + (point2 ? `\n- 은혜(Grace): ${point2}` : "") + searchContext +
+      `\n\n## 네페이지 구조\n### [Big Idea & FCF & Grace]\nBig Idea, FCF, Grace 제시.\n### [도입] 2~3분\n${iceStyle}\n"오늘 본문에는 문제와 답이 함께 있습니다." 본문 낭독.\n### [Page 1 — 본문 속 문제] ~20%\n본문 갈등·한계. **해결하지 마라.**\n### [Page 2 — 삶 속 문제] ~25%\n현대 삶으로. 예화(참고 자료+각주). **바닥까지.** ⚠️ 구체적 인물/상황(P4 거울용). 마지막: "그런데..."\n### [전환점 The Turn] 1~2분\n**클라이맥스.** 어둠 응축→침묵→은혜의 첫 빛. 짧은 문장 3~5개.\n### [Page 3 — 본문 속 은혜] ~25%\n하나님 응답. 보조 성경 1절. 십자가 연결. 감각적 클라이맥스.\n### [Page 4 — 삶 속 은혜] ~20%\n⚠️ **P2 같은 장면 거울 필수.** ${appPick}\n### [결단 기도문] 7~10문장\n### [파송 축복]\n### [부록] 찬양(전2곡+후1~2곡) + 소그룹 질문 4~5개`;
+
+    if (stage === 2 && firstHalf) {
+      messages = [{ role: "user", content: prompt }, { role: "assistant", content: firstHalf },
+        { role: "user", content: `후반부: 전환점(가장 공들여, 짧은 문장 3~5개) → Page 3(은혜, 감각적 클라이맥스) → Page 4(⚠️ P2 거울 필수, ${appPick}) → 기도문 → 파송 → 부록. **P4에서 반드시 P2 같은 장면 거울. 부록까지 완성.**` }];
+    } else {
+      messages = [{ role: "user", content: prompt + "\n\n**[1단계] Big Idea·FCF·Grace, 도입, Page 1, Page 2까지만. P1·2에서 해결책 금지. P2에 구체적 인물/상황(P4 거울용). 완전한 문장으로 마무리.**" }];
+    }
+
   } else {
-    const pointRule = hasPoints
-      ? `- 설교자가 정한 ${numPoints}개의 대지를 모두 사용하라.`
-      : '- 대지는 2개로 하라.';
+    // ━━ 기본 설교공방 (기존 로직 유지 + 웹 검색/각주 추가) ━━
+    systemPrompt = WORKSHOP_SYSTEM + (hasPoints ? " 설교자가 직접 정한 대지를 반드시 존중하세요." : "") + ILLUS_RULES;
+    prompt = basePrompt + searchContext;
 
-    messages = [
-      { role: "user", content: prompt + `\n\n**[1단계 지시] 위 전체 구조 중 다음까지만 작성하세요:**
-- Big Idea & FCF
-- 아이스브레이크
-- 서론 예화
-- 본문 낭독
-- 본문 깊이
-- 대지 전체 (모든 대지를 완성하세요)
-- 대지 사이의 연결 문장 (완전한 문장으로 마무리)
-
-**중요 - 대지 규칙:**
-${pointRule}
-- 각 대지의 분량을 비슷하게 유지하라 (한쪽이 2배 이상 길면 안 됨).
-- 대지 1이 위로/공감 톤이면, 대지 2는 도전/선포 톤으로 감정 대비를 만들라.
-- 아이스브레이크·서론 예화·대지 예화의 소재가 모두 같은 영역이면 안 된다.
-- 예화에서 본문 밖의 다른 성경 구절을 중심으로 전개하지 마라.
-
-호흡·쉼, 대속사, 결론, 기도문, 축도, 부록은 작성하지 마세요.
-**마지막 연결 문장까지 완전한 문장으로 마무리하세요.**` },
-    ];
+    if (stage === 2 && firstHalf) {
+      messages = [
+        { role: "user", content: prompt },
+        { role: "assistant", content: firstHalf },
+        { role: "user", content: `위 설교문의 전반부를 이어서 후반부를 작성해 주세요:
+1. [호흡·쉼] 2. [대속사] **감각적 클라이맥스** 3. [결론 & 적용] ${appStyle} 4. [결단 기도문] 7~10문장 5. [축도·파송] 6. [부록] 찬양+소그룹 질문
+**전반부의 Big Idea, FCF, 톤을 이어가세요. 반드시 부록까지 완성.**` },
+      ];
+    } else {
+      const pointRule = hasPoints ? `설교자가 정한 ${numPoints}개 대지 사용.` : "대지 2개.";
+      messages = [
+        { role: "user", content: prompt + `\n\n**[1단계] Big Idea·FCF, 아이스브레이크, 서론 예화, 본문 낭독, 본문 깊이, 대지 전체. ${pointRule} 완전한 문장으로 마무리.**` },
+      ];
+    }
   }
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -372,7 +458,7 @@ ${pointRule}
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: maxTokens,
-    system: WORKSHOP_SYSTEM + (hasPoints ? ' 설교자가 직접 정한 대지를 반드시 존중하고 그 위에 설교를 세우세요.' : ''),
+    system: systemPrompt,
     messages,
   });
 
