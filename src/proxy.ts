@@ -76,6 +76,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", request.url));
   }
 
+  // /platform 경로: is_admin만 접근 가능
+  if (pathname.startsWith("/platform")) {
+    const { data: adminCheck } = await supabase
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", user.id)
+      .single();
+    if (!adminCheck?.is_admin) {
+      return NextResponse.redirect(new URL("/home", request.url));
+    }
+  }
+
   // /admin 경로: 목회자/admin만 1차 통과 (파트너는 layout에서 DB 확인)
   if (pathname.startsWith("/admin")) {
     if (profile.role !== "pastor" && profile.role !== "admin") {

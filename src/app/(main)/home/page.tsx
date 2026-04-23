@@ -24,6 +24,7 @@ export default function HomePage() {
   const [churchName, setChurchName] = useState<string | null>(null);
   const [role, setRole] = useState<string>("member");
   const [tier, setTier] = useState<string>("free");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [todayQt, setTodayQt] = useState<TodayQt | null>(null);
   const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +43,7 @@ export default function HomePage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("name, church_name, onboarded, role, subscription_tier")
+      .select("name, church_name, onboarded, role, subscription_tier, is_admin")
       .eq("id", user.id)
       .single();
 
@@ -52,6 +53,7 @@ export default function HomePage() {
     setChurchName(data?.church_name || null);
     setRole(data?.role || "member");
     setTier(data?.subscription_tier || "free");
+    if (data?.is_admin) setIsAdmin(true);
 
     // 오늘의 큐티
     try {
@@ -241,6 +243,22 @@ export default function HomePage() {
           </>
         )}
       </div>
+
+      {/* 플랫폼 관리 (is_admin 전용) */}
+      {isAdmin && (
+        <Link href="/platform" className="block mb-4">
+          <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl p-4 shadow-md">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs opacity-80">Platform Admin</p>
+                <p className="font-bold text-lg">플랫폼 관리</p>
+                <p className="text-xs opacity-80 mt-0.5">전체 사용자 · 교회 · 구독 관리</p>
+              </div>
+              <span className="text-3xl">🛡️</span>
+            </div>
+          </div>
+        </Link>
+      )}
 
       {/* 소그룹 나눔 (모든 역할) */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
