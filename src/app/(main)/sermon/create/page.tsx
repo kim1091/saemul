@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase";
 
 type Mode = "quick" | "workshop";
 type Step = "input" | "generating" | "result";
+type Structure = "default" | "onepoint" | "fourpage";
 
 export default function SermonCreatePage() {
   // 역할 확인
@@ -36,6 +37,9 @@ export default function SermonCreatePage() {
   const [audience, setAudience] = useState("전체 회중");
   const [length, setLength] = useState("25");
   const [tone, setTone] = useState("");
+
+  // 설교 방법론
+  const [structure, setStructure] = useState<Structure>("default");
 
   // 대지 (설교공방)
   const [point1, setPoint1] = useState("");
@@ -110,7 +114,7 @@ export default function SermonCreatePage() {
         body: JSON.stringify({
           sermonType: "full",
           passage, memo, audience, length, tone,
-          point1, point2, point3,
+          point1, point2, point3, structure,
           stage: 1,
         }),
       });
@@ -135,7 +139,7 @@ export default function SermonCreatePage() {
         body: JSON.stringify({
           sermonType: "full",
           passage, memo, audience, length, tone,
-          point1, point2, point3,
+          point1, point2, point3, structure,
           stage: 2,
           firstHalf: data1.sermon,
         }),
@@ -364,6 +368,33 @@ export default function SermonCreatePage() {
       {/* ━━ Workshop 모드 입력 ━━ */}
       {mode === "workshop" && (
         <>
+          {/* 설교 방법론 선택 */}
+          <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+            <h3 className="font-bold text-charcoal mb-3">설교 방법론</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { key: "default" as Structure, icon: "🎤", label: "설교공방", desc: "본격 설교" },
+                { key: "onepoint" as Structure, icon: "🎯", label: "원포인트", desc: "하나의 메시지" },
+                { key: "fourpage" as Structure, icon: "📖", label: "네페이지", desc: "문제→은혜" },
+              ]).map((m) => (
+                <button key={m.key} onClick={() => setStructure(m.key)}
+                  className={`p-3 rounded-xl border-2 transition text-center ${structure === m.key ? "border-green bg-green/5" : "border-light-gray bg-cream"}`}>
+                  <p className="text-xl">{m.icon}</p>
+                  <p className={`font-bold text-xs mt-1 ${structure === m.key ? "text-green" : "text-charcoal"}`}>{m.label}</p>
+                  <p className="text-[10px] text-mid-gray">{m.desc}</p>
+                </button>
+              ))}
+            </div>
+            {structure !== "default" && (
+              <div className="mt-3 bg-green/5 border border-green/20 rounded-lg p-3">
+                <p className="text-xs text-green-dark leading-5">
+                  {structure === "onepoint" && "🎯 본문에서 단 하나의 핵심 진리를 추출, Head(이해)·Heart(감동)·Hand(실천) 세 각도로 회중의 심장에 각인시킵니다."}
+                  {structure === "fourpage" && "📖 Paul Scott Wilson — 본문 속 문제 → 삶 속 문제 → 전환점 → 본문 속 은혜 → 삶 속 은혜. 구조 자체가 복음입니다."}
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* 기본 정보 */}
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
             <h3 className="font-bold text-charcoal">기본 정보</h3>
