@@ -190,8 +190,9 @@ function buildWorkshopPrompt(opts: {
   passage?: string; audience: string; length: string; memo: string;
   point1: string; point2: string; point3: string;
   tone?: string; worship: string; season: string;
+  bigIdea?: string; fcf?: string;
 }) {
-  const { passage, audience, length, memo, point1, point2, point3, tone, worship, season } = opts;
+  const { passage, audience, length, memo, point1, point2, point3, tone, worship, season, bigIdea, fcf } = opts;
   const hasPassage = passage && passage.trim().length > 0;
   const hasPoints = !!point1;
   const safeTone = (tone && TONE_MAP[tone]) || '상황에 맞게 톤을 자유롭게 조절. 한 설교 안에서도 부드러움→긴장→감동→도전으로 감정의 흐름을 만들어라.';
@@ -216,9 +217,8 @@ ${point3 ? '- 대지 3: ' + point3 : ''}
 ` : ''}## 작성 지침
 
 ### [Big Idea & FCF]
-설교 맨 처음에 다음을 명시하세요:
-- **Big Idea**: 이 설교 전체를 관통하는 단 하나의 문장 (주어+술어 완성형)
-- **FCF**: 이 본문이 다루는 인간의 근본 문제. "이 말씀이 없으면 청중은 어떤 결핍에 처하는가?"
+${bigIdea ? `설교자가 정한 Big Idea: "${bigIdea}" — 이 문장을 설교의 중심축으로 사용하세요.` : '설교 맨 처음에 Big Idea를 명시하세요: 이 설교 전체를 관통하는 단 하나의 문장 (주어+술어 완성형)'}
+${fcf ? `설교자가 정한 FCF: "${fcf}" — 이 근본 문제에서 출발하세요.` : '**FCF**: 이 본문이 다루는 인간의 근본 문제. "이 말씀이 없으면 청중은 어떤 결핍에 처하는가?"'}
 
 ### [아이스브레이크] 2~3분
 ${iceStyle}
@@ -434,6 +434,8 @@ async function handleWorkshopSermon(
   const point2 = typeof body.point2 === "string" ? body.point2.slice(0, 200) : "";
   const point3 = typeof body.point3 === "string" ? body.point3.slice(0, 200) : "";
   const tone = typeof body.tone === "string" ? body.tone : undefined;
+  const safeBigIdea = typeof body.bigIdea === "string" ? body.bigIdea.slice(0, 300) : "";
+  const safeFcf = typeof body.fcf === "string" ? body.fcf.slice(0, 300) : "";
 
   if (!passage && !memo) {
     return NextResponse.json({ error: "성경 본문 또는 메모를 입력해주세요" }, { status: 400 });
@@ -454,6 +456,7 @@ async function handleWorkshopSermon(
 
   const { prompt: basePrompt, appStyle, hasPoints, numPoints } = buildWorkshopPrompt({
     passage, audience, length, memo, point1, point2, point3, tone, worship, season,
+    bigIdea: safeBigIdea, fcf: safeFcf,
   });
 
   // 방법론별 프롬프트 + 시스템 프롬프트 결정
@@ -468,9 +471,11 @@ async function handleWorkshopSermon(
     // ━━ 원포인트 ━━
     systemPrompt = ONEPOINT_SYSTEM + ILLUS_RULES;
     const corePoint = point1 || "";
+    const opBigIdea = safeBigIdea || corePoint || "";
     prompt = `## 기본 정보\n${passage ? "- 성경 본문: " + passage : "- 본문 자동 선정"}\n- 청중: ${audience}\n- 목표: ${length}분${worship ? "\n- 예배: " + worship : ""}${season ? "\n- 절기: " + season : ""}${memo ? "\n- 설교자 메모: " + memo : ""}` +
-      (corePoint ? `\n\n## 설교자가 정한 핵심 진리\n> "${corePoint}"` : "") + searchContext +
-      `\n\n## 원포인트 구조\n### [Big Idea]\n${corePoint ? "위 핵심 진리를 Big Idea로." : "단 하나의 핵심 진리 제시."}\n### [도입] 2~3분\n${iceStyle}\n"오늘 이것 하나만 말씀드리겠습니다." 본문 낭독.\n### [핵심 선언] 1분\nBig Idea 정면 선포.\n### [각도① Head] ~20%\n본문 배경 핵심 1개. 🔁 1차 반복(발견 톤)\n### [각도② Heart] ~20%\n삶의 장면. 예화(참고 자료+각주). 청중 저항. 🔁 2차 반복(위로 톤)\n### [각도③ Hand] ~20%\n변화·초대. 보조 성경 1절. 🔁 3차 반복(도전 톤)\n### [대속사] 2~3분\n십자가 연결. 감각적 클라이맥스.\n### [착지] 2~3분\n${appPick} "이것 하나만" 실천 1가지. 🔁 최종 반복(선포 톤)\n### [결단 기도문] 5~7문장\n### [파송 축복]\n### [부록] 찬양 + 소그룹 질문 3개`;
+      (opBigIdea ? `\n\n## 설교자가 정한 핵심 진리\n> "${opBigIdea}"` : "") +
+      (safeFcf ? `\n- FCF: ${safeFcf}` : "") + searchContext +
+      `\n\n## 원포인트 구조\n### [Big Idea]\n${opBigIdea ? "위 핵심 진리를 Big Idea로." : "단 하나의 핵심 진리 제시."}\n### [도입] 2~3분\n${iceStyle}\n"오늘 이것 하나만 말씀드리겠습니다." 본문 낭독.\n### [핵심 선언] 1분\nBig Idea 정면 선포.\n### [각도① Head] ~20%\n본문 배경 핵심 1개. 🔁 1차 반복(발견 톤)\n### [각도② Heart] ~20%\n삶의 장면. 예화(참고 자료+각주). 청중 저항. 🔁 2차 반복(위로 톤)\n### [각도③ Hand] ~20%\n변화·초대. 보조 성경 1절. 🔁 3차 반복(도전 톤)\n### [대속사] 2~3분\n십자가 연결. 감각적 클라이맥스.\n### [착지] 2~3분\n${appPick} "이것 하나만" 실천 1가지. 🔁 최종 반복(선포 톤)\n### [결단 기도문] 5~7문장\n### [파송 축복]\n### [부록] 찬양 + 소그룹 질문 3개`;
 
     if (stage === 2 && firstHalf) {
       messages = [{ role: "user", content: prompt }, { role: "assistant", content: firstHalf },
@@ -483,6 +488,8 @@ async function handleWorkshopSermon(
     // ━━ 네페이지 ━━
     systemPrompt = FOURPAGE_SYSTEM + ILLUS_RULES;
     prompt = `## 기본 정보\n${passage ? "- 성경 본문: " + passage : "- 본문 자동 선정"}\n- 청중: ${audience}\n- 목표: ${length}분${worship ? "\n- 예배: " + worship : ""}${season ? "\n- 절기: " + season : ""}${memo ? "\n- 설교자 메모: " + memo : ""}` +
+      (safeBigIdea ? `\n\n## 설교자가 정한 Big Idea\n> "${safeBigIdea}"` : "") +
+      (safeFcf ? `\n- FCF: ${safeFcf}` : "") +
       (point1 ? `\n\n## 설교자 방향\n- 문제(Trouble): ${point1}` : "") + (point2 ? `\n- 은혜(Grace): ${point2}` : "") + searchContext +
       `\n\n## 네페이지 구조\n### [Big Idea & FCF & Grace]\nBig Idea, FCF, Grace 제시.\n### [도입] 2~3분\n${iceStyle}\n"오늘 본문에는 문제와 답이 함께 있습니다." 본문 낭독.\n### [Page 1 — 본문 속 문제] ~20%\n본문 갈등·한계. **해결하지 마라.**\n### [Page 2 — 삶 속 문제] ~25%\n현대 삶으로. 예화(참고 자료+각주). **바닥까지.** ⚠️ 구체적 인물/상황(P4 거울용). 마지막: "그런데..."\n### [전환점 The Turn] 1~2분\n**클라이맥스.** 어둠 응축→침묵→은혜의 첫 빛. 짧은 문장 3~5개.\n### [Page 3 — 본문 속 은혜] ~25%\n하나님 응답. 보조 성경 1절. 십자가 연결. 감각적 클라이맥스.\n### [Page 4 — 삶 속 은혜] ~20%\n⚠️ **P2 같은 장면 거울 필수.** ${appPick}\n### [결단 기도문] 7~10문장\n### [파송 축복]\n### [부록] 찬양(전2곡+후1~2곡) + 소그룹 질문 4~5개`;
 

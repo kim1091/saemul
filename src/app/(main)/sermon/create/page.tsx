@@ -46,7 +46,9 @@ export default function SermonCreatePage() {
   // 설교 방법론
   const [structure, setStructure] = useState<Structure>("deductive");
 
-  // 대지 (설교공방)
+  // 설교 방향 (설교공방)
+  const [bigIdeaText, setBigIdeaText] = useState("");
+  const [fcfText, setFcfText] = useState("");
   const [point1, setPoint1] = useState("");
   const [point2, setPoint2] = useState("");
   const [point3, setPoint3] = useState("");
@@ -123,6 +125,7 @@ export default function SermonCreatePage() {
           sermonType: "full",
           passage, memo, audience, length, tone,
           point1, point2, point3, structure,
+          bigIdea: bigIdeaText, fcf: fcfText,
           stage: 1,
         }),
       });
@@ -148,8 +151,8 @@ export default function SermonCreatePage() {
           sermonType: "full",
           passage, memo, audience, length, tone,
           point1, point2, point3, structure,
-          stage: 2,
-          firstHalf: data1.sermon,
+          bigIdea: bigIdeaText, fcf: fcfText,
+          stage: 2, firstHalf: data1.sermon,
         }),
       });
 
@@ -222,13 +225,13 @@ export default function SermonCreatePage() {
   }
 
   function applyBigIdea(idea: typeof bigIdeas[0], index: number) {
+    setBigIdeaText(idea.b);
+    setFcfText(idea.f);
     setPoint1(idea.p1);
     setPoint2(idea.p2);
     setPoint3(idea.p3);
     setShowPoints(true);
     setSelectedBigIdea(index);
-    // 토스트 대신 잠시 후 결과 닫기
-    setTimeout(() => setBigIdeas([]), 800);
   }
 
   function handleCopy() {
@@ -520,46 +523,75 @@ export default function SermonCreatePage() {
             </div>
           </div>
 
-          {/* 설교 방향 (대지) */}
+          {/* ━━ STEP 2: 설교 방향 ━━ */}
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-charcoal">설교 방향 (선택)</h3>
-              <button onClick={() => setShowPoints(!showPoints)}
-                className="text-xs text-green font-medium">
-                {showPoints ? "접기" : "대지 직접 입력"}
-              </button>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-lg">🎯</span>
+              <h3 className="font-bold text-charcoal">설교 방향</h3>
+              <span className="text-[10px] text-mid-gray">(선택 — 비우면 AI가 자동 설정)</span>
             </div>
 
-            {!showPoints && (
-              <p className="text-xs text-mid-gray">대지를 입력하지 않으면 AI가 자동으로 2개의 대지를 설정합니다.</p>
-            )}
+            {/* BigIdea 직접 입력 */}
+            <div className="mb-3">
+              <label className="text-xs text-gold font-bold block mb-1">💡 Big Idea — 설교 전체를 관통하는 한 문장</label>
+              <input type="text" value={bigIdeaText} onChange={(e) => setBigIdeaText(e.target.value)}
+                placeholder="예) 하나님은 나를 심판하러 오신 게 아니라 살리러 오셨다"
+                className="w-full px-4 py-2.5 bg-cream border border-gold/30 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gold" />
+            </div>
 
-            {showPoints && (
-              <div className="space-y-2 mb-3">
-                <input type="text" value={point1} onChange={(e) => setPoint1(e.target.value)}
-                  placeholder="대지 1 (필수)"
-                  className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
-                <input type="text" value={point2} onChange={(e) => setPoint2(e.target.value)}
-                  placeholder="대지 2 (선택)"
-                  className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
-                <input type="text" value={point3} onChange={(e) => setPoint3(e.target.value)}
-                  placeholder="대지 3 (선택)"
-                  className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+            {/* FCF 직접 입력 */}
+            <div className="mb-3">
+              <label className="text-xs text-mid-gray font-medium block mb-1">FCF — 본문이 다루는 인간의 근본 문제</label>
+              <input type="text" value={fcfText} onChange={(e) => setFcfText(e.target.value)}
+                placeholder="예) 우리는 두려움 때문에 하나님 앞에 나아가지 못하고 어둠 속에 숨는다"
+                className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+            </div>
+
+            {/* 대지 입력 */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-mid-gray font-medium">대지 (포인트)</label>
+                <button onClick={() => setShowPoints(!showPoints)}
+                  className="text-xs text-green font-medium">
+                  {showPoints ? "접기 ▲" : "직접 입력 ▼"}
+                </button>
               </div>
-            )}
+              {!showPoints && (
+                <p className="text-[11px] text-mid-gray">비우면 AI가 자동으로 대지를 설정합니다.</p>
+              )}
+              {showPoints && (
+                <div className="space-y-2 mt-1">
+                  <input type="text" value={point1} onChange={(e) => setPoint1(e.target.value)}
+                    placeholder="대지 1 — 예) 하나님의 사랑은 조건이 없다"
+                    className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                  <input type="text" value={point2} onChange={(e) => setPoint2(e.target.value)}
+                    placeholder="대지 2 — 예) 믿음은 받아들이는 것이다"
+                    className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                  <input type="text" value={point3} onChange={(e) => setPoint3(e.target.value)}
+                    placeholder="대지 3 (선택) — 예) 영생은 지금 시작된다"
+                    className="w-full px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                </div>
+              )}
+            </div>
 
-            {/* BigIdea 분석 버튼 */}
+            {/* 구분선 */}
+            <div className="border-t border-light-gray/50 my-4" />
+
+            {/* 10가지 관점 분석 */}
             {passage && (
-              <button onClick={() => handleBigIdea()} disabled={loadingBigIdea}
-                className="w-full py-3 bg-gradient-to-r from-[#c9a84c] to-[#b8963e] text-white rounded-lg text-sm font-bold disabled:opacity-50 mt-2 transition">
-                {loadingBigIdea ? "AI가 분석 중입니다... (약 10초)" : "🔬 10가지 관점 분석"}
-              </button>
+              <>
+                <p className="text-xs text-mid-gray mb-2">AI가 10가지 관점으로 본문을 분석하고, 선택하면 위 필드에 자동 입력됩니다.</p>
+                <button onClick={() => handleBigIdea()} disabled={loadingBigIdea}
+                  className="w-full py-3 bg-gradient-to-r from-[#c9a84c] to-[#b8963e] text-white rounded-lg text-sm font-bold disabled:opacity-50 transition">
+                  {loadingBigIdea ? "AI가 분석 중입니다... (약 10초)" : "🔬 10가지 관점 분석 (월 10회)"}
+                </button>
+              </>
             )}
 
-            {/* BigIdea 결과 */}
+            {/* BigIdea 분석 결과 */}
             {bigIdeas.length > 0 && (
               <div className="mt-4 space-y-3 max-h-[500px] overflow-y-auto">
-                <p className="text-xs text-gold font-bold">총 {bigIdeas.length}가지 관점 — 선택하면 대지에 자동 입력됩니다</p>
+                <p className="text-xs text-gold font-bold">총 {bigIdeas.length}가지 관점 — 선택하면 Big Idea · FCF · 대지에 자동 입력</p>
                 {bigIdeas.map((idea, i) => (
                   <button key={i} onClick={() => applyBigIdea(idea, i)}
                     className={`w-full text-left relative rounded-xl p-4 border-2 transition ${
@@ -579,7 +611,7 @@ export default function SermonCreatePage() {
                       </div>
                     </div>
                     {selectedBigIdea === i && (
-                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-gold text-white text-[10px] font-bold rounded-full">적용됨</div>
+                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-gold text-white text-[10px] font-bold rounded-full">적용됨 ✓</div>
                     )}
                   </button>
                 ))}
