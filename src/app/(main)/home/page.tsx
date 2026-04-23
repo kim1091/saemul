@@ -23,6 +23,7 @@ export default function HomePage() {
   const [displayName, setDisplayName] = useState("");
   const [churchName, setChurchName] = useState<string | null>(null);
   const [role, setRole] = useState<string>("member");
+  const [tier, setTier] = useState<string>("free");
   const [todayQt, setTodayQt] = useState<TodayQt | null>(null);
   const [myGroups, setMyGroups] = useState<MyGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,7 +42,7 @@ export default function HomePage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("name, church_name, onboarded, role")
+      .select("name, church_name, onboarded, role, subscription_tier")
       .eq("id", user.id)
       .single();
 
@@ -50,6 +51,7 @@ export default function HomePage() {
     setDisplayName(data?.name || user.email?.split("@")[0] || "사용자");
     setChurchName(data?.church_name || null);
     setRole(data?.role || "member");
+    setTier(data?.subscription_tier || "free");
 
     // 오늘의 큐티
     try {
@@ -209,11 +211,19 @@ export default function HomePage() {
               <p className="font-bold text-green-dark mt-2">읽기 플랜</p>
               <p className="text-mid-gray text-xs mt-0.5">성경 통독 계획</p>
             </Link>
-            <Link href="/sermon/create" className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
-              <span className="text-2xl">🎤</span>
-              <p className="font-bold text-green-dark mt-2">설교</p>
-              <p className="text-mid-gray text-xs mt-0.5">5분 설교 만들기</p>
-            </Link>
+            {tier !== "free" ? (
+              <Link href="/sermon/create" className="bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                <span className="text-2xl">🎤</span>
+                <p className="font-bold text-green-dark mt-2">설교</p>
+                <p className="text-mid-gray text-xs mt-0.5">5분 설교 만들기</p>
+              </Link>
+            ) : (
+              <Link href="/profile" className="bg-cream rounded-xl p-4 shadow-sm hover:shadow-md transition border border-light-gray">
+                <span className="text-2xl">🎤</span>
+                <p className="font-bold text-gold mt-2">5분 설교</p>
+                <p className="text-mid-gray text-xs mt-0.5">Premium부터 이용</p>
+              </Link>
+            )}
           </>
         )}
         {isPastor && (

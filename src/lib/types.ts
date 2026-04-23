@@ -1,5 +1,5 @@
 export type UserRole = "member" | "pastor" | "admin";
-export type SubscriptionTier = "free" | "premium" | "pastor" | "church";
+export type SubscriptionTier = "free" | "premium" | "premium_plus" | "pastor" | "church";
 
 export interface Profile {
   id: string;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { canAccessWorkshop } from "@/lib/sermon-guard";
 
 const ANALYZE_SYSTEM = `당신은 설교학 전문가입니다. 주어진 설교문을 아래 8가지 항목으로 분석하고, 반드시 유효한 JSON만 출력하세요. 설명 텍스트, 마크다운 코드블록, 기타 내용은 절대 포함하지 마세요.
 
@@ -46,11 +47,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "프로필을 찾을 수 없습니다." }, { status: 403 });
     }
 
-    const paid = profile.is_admin || profile.role === "pastor" ||
-      (profile.subscription_tier !== "free" && !!profile.subscription_tier);
-
-    if (!paid) {
-      return NextResponse.json({ error: "유료 회원만 이용 가능한 기능입니다" }, { status: 403 });
+    if (!canAccessWorkshop(profile)) {
+      return NextResponse.json(
+        { error: "설교공방은 목회자 전용 기능입니다. 부목사/전도사는 Pastor 플랜(₩19,900/월)으로 이용 가능합니다." },
+        { status: 403 }
+      );
     }
 
     const body = await request.json();
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 2048,
-      system: ANALYZE_SYSTEM,
+      system: [{ type: "text", text: ANALYZE_SYSTEM, cache_control: { type: "ephemeral" } }],
       messages: [{
         role: "user",
         content: `다음 설교문을 분석해주세요:\n\n${sermonText.slice(0, 18000)}`,

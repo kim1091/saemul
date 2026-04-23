@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { MONTHLY_BIGIDEA_LIMIT } from "@/lib/sermon-guard";
 
 export async function POST(request: Request) {
   try {
@@ -22,11 +23,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "프로필을 찾을 수 없습니다." }, { status: 403 });
     }
 
-    const paid = profile.is_admin || profile.role === "pastor" ||
-      (profile.subscription_tier !== "free" && !!profile.subscription_tier);
+    // Free 사용자 차단
+    const tier = profile.subscription_tier || "free";
+    if (tier === "free" && !profile.is_admin && profile.role !== "pastor") {
+      return NextResponse.json(
+        { error: "Big Idea 분석은 Premium 플랜부터 이용 가능합니다." },
+        { status: 403 }
+      );
+    }
 
-    if (!paid) {
-      return NextResponse.json({ error: "유료 회원만 이용 가능한 기능입니다" }, { status: 403 });
+    // BigIdea 월 10회 제한 (모든 유료 사용자)
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const startOfMonth = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), 1) - kstOffset);
+
+    const { count: biCount } = await supabase
+      .from("feature_usage")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("feature", "bigidea")
+      .gte("created_at", startOfMonth.toISOString());
+
+    if ((biCount || 0) >= MONTHLY_BIGIDEA_LIMIT) {
+      return NextResponse.json(
+        { error: `이번 달 Big Idea 분석 ${MONTHLY_BIGIDEA_LIMIT}회를 모두 사용하셨습니다.`, monthly_used: biCount, monthly_limit: MONTHLY_BIGIDEA_LIMIT },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();
@@ -93,7 +116,11 @@ ${passage}
     }
 
     const ideas = JSON.parse(jsonMatch[0]);
-    return NextResponse.json({ ideas });
+
+    // 사용 기록 저장
+    await supabase.from("feature_usage").insert({ user_id: user.id, feature: "bigidea" });
+
+    return NextResponse.json({ ideas, monthly_used: (biCount || 0) + 1, monthly_limit: MONTHLY_BIGIDEA_LIMIT });
   } catch (error) {
     console.error("BigIdea error:", error);
     return NextResponse.json({ error: "AI 분석 중 오류가 발생했습니다" }, { status: 500 });

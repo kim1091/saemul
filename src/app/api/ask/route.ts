@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getMonthlyAskLimit } from "@/lib/sermon-guard";
 
 const SYSTEM_PROMPT = `당신은 복음주의 신학에 기반한 성경 질문 도우미 "샘물 AI"입니다.
 
@@ -35,33 +36,69 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "질문을 입력해주세요." }, { status: 400 });
     }
 
-    // 원자적 쿼터 체크+증가 (RPC: SELECT FOR UPDATE로 레이스 방지)
-    // AI 호출 전에 슬롯 예약 — 실패 시에도 1회 소진 (일일 리셋이라 합리적)
-    const { data: quota, error: quotaErr } = await supabase.rpc(
-      "try_use_daily_ask",
-      { p_user_id: user.id }
-    );
+    // 프로필 조회 → 티어별 쿼터 분기
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, subscription_tier, is_admin")
+      .eq("id", user.id)
+      .single();
 
-    if (quotaErr) {
-      console.error("try_use_daily_ask RPC error:", quotaErr);
-      return NextResponse.json(
-        { error: "질문 횟수 확인에 실패했습니다." },
-        { status: 500 }
+    const askLimit = getMonthlyAskLimit(profile || {});
+    let dailyCount: number | undefined;
+    let monthlyCount: number | undefined;
+
+    if (askLimit === 0) {
+      // Free: 기존 일별 3회 RPC
+      const { data: quota, error: quotaErr } = await supabase.rpc(
+        "try_use_daily_ask",
+        { p_user_id: user.id }
       );
-    }
 
-    if (!quota?.allowed) {
-      if (quota?.error === "limit_exceeded") {
+      if (quotaErr) {
+        console.error("try_use_daily_ask RPC error:", quotaErr);
         return NextResponse.json(
-          { error: "오늘의 무료 질문 횟수(3회)를 모두 사용했습니다." },
-          { status: 429 }
+          { error: "질문 횟수 확인에 실패했습니다." },
+          { status: 500 }
         );
       }
-      return NextResponse.json(
-        { error: "질문 권한을 확인할 수 없습니다." },
-        { status: 403 }
-      );
+
+      if (!quota?.allowed) {
+        if (quota?.error === "limit_exceeded") {
+          return NextResponse.json(
+            { error: "오늘의 무료 질문 횟수(3회)를 모두 사용했습니다. Premium 플랜으로 업그레이드하면 월 30회 이용 가능합니다." },
+            { status: 429 }
+          );
+        }
+        return NextResponse.json(
+          { error: "질문 권한을 확인할 수 없습니다." },
+          { status: 403 }
+        );
+      }
+      dailyCount = quota.count;
+    } else if (askLimit > 0) {
+      // Premium: 월간 대화 세션 수 제한 (새 대화만 카운트, 후속 질문은 무제한)
+      if (!conversationId) {
+        const now = new Date();
+        const kstOffset = 9 * 60 * 60 * 1000;
+        const kstNow = new Date(now.getTime() + kstOffset);
+        const startOfMonth = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), 1) - kstOffset);
+
+        const { count } = await supabase
+          .from("ask_conversations")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", startOfMonth.toISOString());
+
+        monthlyCount = (count || 0) + 1;
+        if ((count || 0) >= askLimit) {
+          return NextResponse.json(
+            { error: `이번 달 AI 질문 ${askLimit}회를 모두 사용하셨습니다. Premium+로 업그레이드하면 무제한 이용 가능합니다.`, monthly_used: count, monthly_limit: askLimit },
+            { status: 429 }
+          );
+        }
+      }
     }
+    // askLimit === -1: 무제한 (Premium+/Pastor/Church) — 쿼터 체크 없음
 
     // 대화 생성 또는 기존 대화 사용
     let convId = conversationId;
@@ -102,7 +139,7 @@ export async function POST(request: Request) {
     const response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1500,
-      system: SYSTEM_PROMPT,
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages,
     });
 
@@ -128,7 +165,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       conversationId: convId,
       message: assistantMessage,
-      dailyCount: quota.count,
+      dailyCount,
+      monthlyCount,
+      monthlyLimit: askLimit > 0 ? askLimit : undefined,
     });
   } catch (error) {
     console.error("Ask API error:", error);

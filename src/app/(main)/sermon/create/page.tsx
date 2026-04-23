@@ -9,23 +9,28 @@ type Step = "input" | "generating" | "result";
 type Structure = "deductive" | "inductive" | "narrative" | "textual" | "onepoint" | "fourpage";
 
 export default function SermonCreatePage() {
-  // 역할 확인
+  // 역할 & 구독 확인
   const [role, setRole] = useState<string>("member");
+  const [tier, setTier] = useState<string>("free");
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [monthlyUsed, setMonthlyUsed] = useState<number | null>(null);
+  const [monthlyLimit, setMonthlyLimit] = useState<number | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
-      supabase.from("profiles").select("role").eq("id", user.id).single()
+      supabase.from("profiles").select("role, subscription_tier").eq("id", user.id).single()
         .then(({ data }) => {
           if (data?.role) setRole(data.role);
+          if (data?.subscription_tier) setTier(data.subscription_tier);
           setRoleLoaded(true);
         });
     });
   }, []);
 
   const isPastor = role === "pastor" || role === "admin";
+  const canQuickSermon = isPastor || tier === "premium" || tier === "premium_plus" || tier === "pastor" || tier === "church";
 
   // 모드 & 단계
   const [mode, setMode] = useState<Mode>("quick");
@@ -89,6 +94,8 @@ export default function SermonCreatePage() {
         setError(data.error);
       } else {
         setFullSermon(data.content || data.sermon || "");
+        if (data.monthly_used !== undefined) setMonthlyUsed(data.monthly_used);
+        if (data.monthly_limit !== undefined) setMonthlyLimit(data.monthly_limit);
         setStep("result");
       }
     } catch {
@@ -188,15 +195,16 @@ export default function SermonCreatePage() {
   }
 
   // ── BigIdea 심층 분석 ──
-  async function handleBigIdea() {
-    if (!passage) return;
+  async function handleBigIdea(overridePassage?: string) {
+    const p = overridePassage || passage;
+    if (!p) return;
     setLoadingBigIdea(true);
 
     try {
       const res = await fetch("/api/sermon/bigidea", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ passage }),
+        body: JSON.stringify({ passage: p }),
       });
 
       const data = await res.json();
@@ -334,14 +342,25 @@ export default function SermonCreatePage() {
             <p className="text-xs text-mid-gray mt-0.5">본격 설교 제작</p>
           </button>
         </div>
-      ) : (
+      ) : canQuickSermon ? (
         <div className="bg-gold/10 border border-gold/30 rounded-xl p-3 mb-5">
           <p className="text-gold text-sm font-medium">5분 나눔 설교를 만들어보세요</p>
+          {monthlyUsed !== null && monthlyLimit !== null && (
+            <p className="text-xs text-mid-gray mt-1">이번 달 {monthlyUsed}/{monthlyLimit}회 사용</p>
+          )}
+        </div>
+      ) : (
+        <div className="bg-cream border border-light-gray rounded-xl p-4 mb-5 text-center">
+          <p className="text-charcoal text-sm font-medium mb-1">5분 설교는 Premium부터 이용 가능합니다</p>
+          <p className="text-mid-gray text-xs mb-3">Premium: 월 4회 / Premium+: 월 10회</p>
+          <Link href="/profile" className="inline-block px-4 py-2 bg-gold text-charcoal text-sm font-bold rounded-lg">
+            업그레이드 →
+          </Link>
         </div>
       )}
 
       {/* ━━ Quick 모드 입력 ━━ */}
-      {mode === "quick" && (
+      {mode === "quick" && canQuickSermon && (
         <>
           <div className="bg-white rounded-2xl shadow-sm p-5 mb-4 space-y-3">
             <h3 className="font-bold text-charcoal">성경 본문</h3>
@@ -357,6 +376,29 @@ export default function SermonCreatePage() {
                 className="flex-1 px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
             </div>
           </div>
+
+          {/* BigIdea 분석 (Premium 이상) */}
+          {tier !== "free" && book && chapter && (
+            <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
+              <h3 className="font-bold text-charcoal mb-2">본문 심층 분석</h3>
+              <p className="text-xs text-mid-gray mb-3">AI가 10가지 관점으로 본문을 분석합니다 (월 10회)</p>
+              <button onClick={() => handleBigIdea(`${book} ${chapter}:${verseStart || 1}-${verseEnd || verseStart || 1}`)} disabled={loadingBigIdea}
+                className="w-full py-2.5 bg-gold/10 text-gold border border-gold/30 rounded-lg text-sm font-medium disabled:opacity-50">
+                {loadingBigIdea ? "분석 중..." : "Big Idea 심층 분석"}
+              </button>
+              {bigIdeas.length > 0 && (
+                <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+                  {bigIdeas.map((idea, i) => (
+                    <div key={i} className="bg-cream rounded-xl p-3">
+                      <p className="text-xs text-gold font-medium mb-1">{idea.angle}</p>
+                      <p className="text-sm font-bold text-charcoal mb-1">{idea.b}</p>
+                      <p className="text-xs text-mid-gray">{idea.f}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <button onClick={handleQuickGenerate} disabled={loading || !book || !chapter}
             className="w-full py-3.5 bg-green text-white font-bold rounded-xl text-base disabled:opacity-50 transition">
@@ -489,7 +531,7 @@ export default function SermonCreatePage() {
 
             {/* BigIdea 분석 버튼 */}
             {passage && (
-              <button onClick={handleBigIdea} disabled={loadingBigIdea}
+              <button onClick={() => handleBigIdea()} disabled={loadingBigIdea}
                 className="w-full py-2.5 bg-gold/10 text-gold border border-gold/30 rounded-lg text-sm font-medium disabled:opacity-50 mt-2">
                 {loadingBigIdea ? "분석 중..." : "AI 심층 분석 (10가지 관점)"}
               </button>

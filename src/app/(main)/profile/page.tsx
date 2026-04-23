@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 
 type Role = "member" | "pastor" | "admin";
-type Tier = "free" | "premium" | "pastor" | "church";
+type Tier = "free" | "premium" | "premium_plus" | "pastor" | "church";
 
 interface Profile {
   name: string | null;
@@ -52,9 +52,10 @@ export default function ProfilePage() {
 
   const tierLabels: Record<Tier, { label: string; color: string }> = {
     free: { label: "무료", color: "bg-mid-gray" },
-    premium: { label: "프리미엄", color: "bg-gold" },
-    pastor: { label: "목회자", color: "bg-green" },
-    church: { label: "교회", color: "bg-green-dark" },
+    premium: { label: "Premium", color: "bg-gold" },
+    premium_plus: { label: "Premium+", color: "bg-gold" },
+    pastor: { label: "Pastor", color: "bg-green" },
+    church: { label: "Church", color: "bg-green-dark" },
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-[60vh]"><p className="text-mid-gray">불러오는 중...</p></div>;
@@ -112,15 +113,29 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {profile.subscription_tier === "free" && (
+      {(profile.subscription_tier === "free" || profile.subscription_tier === "premium") && (
         <div className="bg-green-dark text-white rounded-2xl p-5 mb-4">
-          <h3 className="font-bold mb-1">프리미엄으로 업그레이드</h3>
-          <p className="text-light-gray text-sm mb-3">
-            무제한 AI 질문, 소그룹 생성, 무제한 설교
-          </p>
-          <button className="px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm">
-            월 4,900원으로 시작
-          </button>
+          {profile.subscription_tier === "free" ? (
+            <>
+              <h3 className="font-bold mb-1">Premium으로 업그레이드</h3>
+              <p className="text-light-gray text-sm mb-3">
+                5분 설교 월 4회, AI 질문 월 30회, 소그룹 생성
+              </p>
+              <button className="px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm">
+                월 4,900원으로 시작
+              </button>
+            </>
+          ) : (
+            <>
+              <h3 className="font-bold mb-1">Premium+로 업그레이드</h3>
+              <p className="text-light-gray text-sm mb-3">
+                5분 설교 월 10회, AI 질문 무제한
+              </p>
+              <button className="px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm">
+                월 9,900원으로 업그레이드
+              </button>
+            </>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient, createServiceRoleClient } from "@/lib/supabase-server";
+import { canAccessWorkshop, getMonthlySermonLimit } from "@/lib/sermon-guard";
 
 // ═══ 웹 검색 (Tavily) ═══
 async function searchIllustrations(passage: string, memo: string): Promise<string> {
@@ -307,6 +308,47 @@ async function handleQuickSermon(
   userId: string,
   body: Record<string, unknown>,
 ) {
+  // 티어별 월간 설교 한도 체크
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, subscription_tier, is_admin")
+    .eq("id", userId)
+    .single();
+
+  const limit = getMonthlySermonLimit(profile || {});
+
+  // 0 = 이용 불가 (Free)
+  if (limit === 0) {
+    return NextResponse.json(
+      { error: "5분 설교는 Premium 플랜부터 이용 가능합니다.", monthly_used: 0, monthly_limit: 0 },
+      { status: 403 }
+    );
+  }
+
+  // 월간 한도가 있는 경우 (-1이 아닌 경우) 카운트 체크
+  let monthlyUsed = 0;
+  if (limit > 0) {
+    const now = new Date();
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstNow = new Date(now.getTime() + kstOffset);
+    const startOfMonth = new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), 1) - kstOffset);
+
+    const { count } = await supabase
+      .from("sermons")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("sermon_type", "quick")
+      .gte("created_at", startOfMonth.toISOString());
+
+    monthlyUsed = count || 0;
+    if (monthlyUsed >= limit) {
+      return NextResponse.json(
+        { error: `이번 달 5분 설교 ${limit}회를 모두 사용하셨습니다. 다음 달에 다시 이용해주세요.`, monthly_used: monthlyUsed, monthly_limit: limit },
+        { status: 403 }
+      );
+    }
+  }
+
   const { book, chapter, verseStart, verseEnd, audience } = body as {
     book: string; chapter: number; verseStart: number; verseEnd: number; audience?: string;
   };
@@ -345,7 +387,10 @@ async function handleQuickSermon(
     .select("id")
     .single();
 
-  return NextResponse.json({ id: sermon?.id, title: sermonData.title, content: sermonData.content });
+  // 한도가 있는 티어에게 월 사용량 반환 (생성 후 +1 반영)
+  const returnUsed = limit > 0 ? monthlyUsed + 1 : undefined;
+
+  return NextResponse.json({ id: sermon?.id, title: sermonData.title, content: sermonData.content, monthly_used: returnUsed, monthly_limit: limit > 0 ? limit : undefined });
 }
 
 // ── Workshop 설교공방 2단계 설교 ──
@@ -363,9 +408,17 @@ async function handleWorkshopSermon(
 
   if (!profile) return NextResponse.json({ error: "프로필을 찾을 수 없습니다." }, { status: 403 });
 
-  const paid = isPaid(profile);
+  // 설교공방은 목회자(담임/부목사/전도사) 전용
+  if (!canAccessWorkshop(profile)) {
+    return NextResponse.json(
+      { error: "설교공방은 목회자 전용 기능입니다. 부목사/전도사는 Pastor 플랜(₩19,900/월)으로 이용 가능합니다." },
+      { status: 403 }
+    );
+  }
 
-  // 체험 쿼터 (유료가 아닌 경우 3회 제한)
+  const paid = canAccessWorkshop(profile);
+
+  // 체험 쿼터 (유료가 아닌 경우 3회 제한 — pastor role이지만 무료 구독인 경우)
   const currentCount = (profile.trial_count as number) || 0;
   if (!paid && currentCount >= 3) {
     return NextResponse.json(
@@ -474,7 +527,7 @@ async function handleWorkshopSermon(
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: maxTokens,
-    system: systemPrompt,
+    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages,
   });
 
