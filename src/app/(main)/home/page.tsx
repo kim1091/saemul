@@ -103,10 +103,18 @@ export default function HomePage() {
           <p className="text-mid-gray text-sm mt-0.5">{today}</p>
           {churchName && <p className="text-xs text-gold mt-1">⛪ {churchName}</p>}
         </div>
-        <Link href="/profile"
-          className="w-10 h-10 rounded-full bg-green-dark text-white flex items-center justify-center text-lg font-bold">
-          {displayName ? displayName[0].toUpperCase() : "?"}
-        </Link>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Link href="/platform"
+              className="px-2.5 py-1 bg-charcoal/10 text-charcoal text-[10px] font-medium rounded-full">
+              관리자 모드
+            </Link>
+          )}
+          <Link href="/profile"
+            className="w-10 h-10 rounded-full bg-green-dark text-white flex items-center justify-center text-lg font-bold">
+            {displayName ? displayName[0].toUpperCase() : "?"}
+          </Link>
+        </div>
       </div>
 
       {/* 교회 가입 안내 */}
@@ -243,22 +251,6 @@ export default function HomePage() {
           </>
         )}
       </div>
-
-      {/* 플랫폼 관리 (is_admin 전용) */}
-      {isAdmin && (
-        <Link href="/platform" className="block mb-4">
-          <div className="bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl p-4 shadow-md">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs opacity-80">Platform Admin</p>
-                <p className="font-bold text-lg">플랫폼 관리</p>
-                <p className="text-xs opacity-80 mt-0.5">전체 사용자 · 교회 · 구독 관리</p>
-              </div>
-              <span className="text-3xl">🛡️</span>
-            </div>
-          </div>
-        </Link>
-      )}
 
       {/* 소그룹 나눔 (모든 역할) */}
       <div className="bg-white rounded-xl p-5 shadow-sm">
