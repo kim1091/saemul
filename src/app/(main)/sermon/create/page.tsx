@@ -55,6 +55,7 @@ export default function SermonCreatePage() {
   // BigIdea 분석
   const [bigIdeas, setBigIdeas] = useState<Array<{b:string;f:string;p1:string;p2:string;p3:string;angle:string}>>([]);
   const [loadingBigIdea, setLoadingBigIdea] = useState(false);
+  const [selectedBigIdea, setSelectedBigIdea] = useState<number | null>(null);
 
   // 5분 설교 입력
   const [book, setBook] = useState("");
@@ -220,12 +221,14 @@ export default function SermonCreatePage() {
     }
   }
 
-  function applyBigIdea(idea: typeof bigIdeas[0]) {
+  function applyBigIdea(idea: typeof bigIdeas[0], index: number) {
     setPoint1(idea.p1);
     setPoint2(idea.p2);
     setPoint3(idea.p3);
     setShowPoints(true);
-    setBigIdeas([]);
+    setSelectedBigIdea(index);
+    // 토스트 대신 잠시 후 결과 닫기
+    setTimeout(() => setBigIdeas([]), 800);
   }
 
   function handleCopy() {
@@ -380,19 +383,35 @@ export default function SermonCreatePage() {
           {/* BigIdea 분석 (Premium 이상) */}
           {tier !== "free" && book && chapter && (
             <div className="bg-white rounded-2xl shadow-sm p-5 mb-4">
-              <h3 className="font-bold text-charcoal mb-2">본문 심층 분석</h3>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">🔬</span>
+                <h3 className="font-bold text-charcoal">본문 심층 분석</h3>
+              </div>
               <p className="text-xs text-mid-gray mb-3">AI가 10가지 관점으로 본문을 분석합니다 (월 10회)</p>
               <button onClick={() => handleBigIdea(`${book} ${chapter}:${verseStart || 1}-${verseEnd || verseStart || 1}`)} disabled={loadingBigIdea}
-                className="w-full py-2.5 bg-gold/10 text-gold border border-gold/30 rounded-lg text-sm font-medium disabled:opacity-50">
-                {loadingBigIdea ? "분석 중..." : "Big Idea 심층 분석"}
+                className="w-full py-3 bg-gradient-to-r from-[#c9a84c] to-[#b8963e] text-white rounded-lg text-sm font-bold disabled:opacity-50 transition">
+                {loadingBigIdea ? "AI가 분석 중입니다... (약 10초)" : "🔬 10가지 관점 분석"}
               </button>
               {bigIdeas.length > 0 && (
-                <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
+                <div className="mt-4 space-y-3 max-h-[500px] overflow-y-auto">
+                  <p className="text-xs text-gold font-bold">총 {bigIdeas.length}가지 관점이 발견되었습니다</p>
                   {bigIdeas.map((idea, i) => (
-                    <div key={i} className="bg-cream rounded-xl p-3">
-                      <p className="text-xs text-gold font-medium mb-1">{idea.angle}</p>
-                      <p className="text-sm font-bold text-charcoal mb-1">{idea.b}</p>
-                      <p className="text-xs text-mid-gray">{idea.f}</p>
+                    <div key={i} className={`relative bg-cream rounded-xl p-4 border-2 transition cursor-default ${
+                      selectedBigIdea === i ? "border-gold bg-gold/5" : "border-transparent hover:border-gold/30"
+                    }`}>
+                      <div className="flex items-start gap-3">
+                        <span className="shrink-0 w-6 h-6 rounded-full bg-gold text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="inline-block px-2 py-0.5 bg-gold/15 text-gold text-[10px] font-bold rounded-full mb-1.5">{idea.angle}</span>
+                          <p className="text-sm font-bold text-[#c9a84c] leading-snug mb-1">{idea.b}</p>
+                          <p className="text-xs text-mid-gray mb-2">{idea.f}</p>
+                          <div className="flex flex-col gap-1 text-xs text-charcoal/70">
+                            <p>• {idea.p1}</p>
+                            {idea.p2 && <p>• {idea.p2}</p>}
+                            {idea.p3 && <p>• {idea.p3}</p>}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -532,21 +551,36 @@ export default function SermonCreatePage() {
             {/* BigIdea 분석 버튼 */}
             {passage && (
               <button onClick={() => handleBigIdea()} disabled={loadingBigIdea}
-                className="w-full py-2.5 bg-gold/10 text-gold border border-gold/30 rounded-lg text-sm font-medium disabled:opacity-50 mt-2">
-                {loadingBigIdea ? "분석 중..." : "AI 심층 분석 (10가지 관점)"}
+                className="w-full py-3 bg-gradient-to-r from-[#c9a84c] to-[#b8963e] text-white rounded-lg text-sm font-bold disabled:opacity-50 mt-2 transition">
+                {loadingBigIdea ? "AI가 분석 중입니다... (약 10초)" : "🔬 10가지 관점 분석"}
               </button>
             )}
 
             {/* BigIdea 결과 */}
             {bigIdeas.length > 0 && (
-              <div className="mt-3 space-y-2 max-h-80 overflow-y-auto">
-                <p className="text-xs text-mid-gray font-medium">관점을 선택하면 대지에 자동 입력됩니다:</p>
+              <div className="mt-4 space-y-3 max-h-[500px] overflow-y-auto">
+                <p className="text-xs text-gold font-bold">총 {bigIdeas.length}가지 관점 — 선택하면 대지에 자동 입력됩니다</p>
                 {bigIdeas.map((idea, i) => (
-                  <button key={i} onClick={() => applyBigIdea(idea)}
-                    className="w-full text-left bg-cream rounded-xl p-3 hover:bg-green/5 transition">
-                    <p className="text-xs text-gold font-medium mb-1">{idea.angle}</p>
-                    <p className="text-sm font-bold text-charcoal mb-1">{idea.b}</p>
-                    <p className="text-xs text-mid-gray">{idea.f}</p>
+                  <button key={i} onClick={() => applyBigIdea(idea, i)}
+                    className={`w-full text-left relative rounded-xl p-4 border-2 transition ${
+                      selectedBigIdea === i ? "border-gold bg-gold/5" : "bg-cream border-transparent hover:border-gold/30"
+                    }`}>
+                    <div className="flex items-start gap-3">
+                      <span className="shrink-0 w-6 h-6 rounded-full bg-gold text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="inline-block px-2 py-0.5 bg-gold/15 text-gold text-[10px] font-bold rounded-full mb-1.5">{idea.angle}</span>
+                        <p className="text-sm font-bold text-[#c9a84c] leading-snug mb-1">{idea.b}</p>
+                        <p className="text-xs text-mid-gray mb-2">{idea.f}</p>
+                        <div className="flex flex-col gap-1 text-xs text-charcoal/70">
+                          <p>• {idea.p1}</p>
+                          {idea.p2 && <p>• {idea.p2}</p>}
+                          {idea.p3 && <p>• {idea.p3}</p>}
+                        </div>
+                      </div>
+                    </div>
+                    {selectedBigIdea === i && (
+                      <div className="absolute top-2 right-2 px-2 py-0.5 bg-gold text-white text-[10px] font-bold rounded-full">적용됨</div>
+                    )}
                   </button>
                 ))}
               </div>
