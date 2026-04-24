@@ -16,6 +16,7 @@ const adminMenus = [
   { href: "/admin/members", icon: "👥", title: "성도 관리", desc: "교인 명부, 부서별 관리", color: "bg-mid-gray", finance: false },
   { href: "/admin/report", icon: "📊", title: "교세 보고서", desc: "출석·재정·교인 통계 + 엑셀", color: "bg-green", finance: false },
   { href: "/admin/certificate", icon: "📜", title: "증명서 발급", desc: "교인·세례·전입전출 증명서", color: "bg-[#8B6B3D]", finance: false },
+  { href: "/admin/sms", icon: "💬", title: "문자 발송", desc: "단체·부서별·개별 문자 발송", color: "bg-blue-500", finance: false },
 ];
 
 function formatWon(n: number) { return n.toLocaleString("ko-KR") + "원"; }
