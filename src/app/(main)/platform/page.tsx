@@ -22,6 +22,25 @@ interface ChurchRow {
   created_at: string;
 }
 
+interface PaymentRow {
+  id: string;
+  user_id: string;
+  order_id: string;
+  tier: string;
+  amount: number;
+  months: number;
+  status: string;
+  method: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface MonthlyRevenue {
+  month: string;
+  amount: number;
+  count: number;
+}
+
 interface Stats {
   totalUsers: number;
   totalChurches: number;
@@ -31,6 +50,11 @@ interface Stats {
   roleCounts: Record<string, number>;
   users: UserRow[];
   churches: ChurchRow[];
+  totalRevenue: number;
+  totalPaidOrders: number;
+  monthlyRevenue: MonthlyRevenue[];
+  recentPayments: PaymentRow[];
+  featureCounts: Record<string, number>;
 }
 
 const TIER_LABELS: Record<string, { label: string; color: string }> = {
@@ -47,7 +71,7 @@ export default function PlatformPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [updating, setUpdating] = useState<string | null>(null);
-  const [tab, setTab] = useState<"overview" | "users" | "churches">("overview");
+  const [tab, setTab] = useState<"overview" | "users" | "churches" | "revenue">("overview");
 
   useEffect(() => { loadStats(); }, []);
 
@@ -105,6 +129,7 @@ export default function PlatformPage() {
       <div className="flex gap-2 mb-5">
         {([
           { key: "overview" as const, label: "통계" },
+          { key: "revenue" as const, label: "매출·결제" },
           { key: "users" as const, label: `사용자 (${stats.totalUsers})` },
           { key: "churches" as const, label: `교회 (${stats.totalChurches})` },
         ]).map(t => (
@@ -124,6 +149,8 @@ export default function PlatformPage() {
               { label: "교회", value: stats.totalChurches, icon: "⛪", color: "text-gold" },
               { label: "설교 생성", value: stats.totalSermons, icon: "✍️", color: "text-green-dark" },
               { label: "AI 질문", value: stats.totalAsks, icon: "💬", color: "text-blue-500" },
+              { label: "총 매출", value: `₩${(stats.totalRevenue || 0).toLocaleString()}`, icon: "💰", color: "text-gold" },
+              { label: "결제 건수", value: stats.totalPaidOrders || 0, icon: "🧾", color: "text-green" },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl p-4 shadow-sm">
                 <p className="text-2xl mb-1">{s.icon}</p>
@@ -155,7 +182,7 @@ export default function PlatformPage() {
           </div>
 
           {/* 역할 분포 */}
-          <div className="bg-white rounded-xl p-5 shadow-sm">
+          <div className="bg-white rounded-xl p-5 shadow-sm mb-4">
             <h3 className="font-bold text-charcoal mb-3">역할 분포</h3>
             <div className="flex gap-4">
               {Object.entries(stats.roleCounts).map(([role, count]) => (
@@ -165,6 +192,105 @@ export default function PlatformPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* 이번 달 API 사용량 */}
+          {stats.featureCounts && Object.keys(stats.featureCounts).length > 0 && (
+            <div className="bg-white rounded-xl p-5 shadow-sm">
+              <h3 className="font-bold text-charcoal mb-3">이번 달 API 사용량</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {Object.entries(stats.featureCounts).map(([feature, count]) => (
+                  <div key={feature} className="text-center bg-cream rounded-lg p-3">
+                    <p className="text-xl font-bold text-green-dark">{count}</p>
+                    <p className="text-xs text-mid-gray">{feature === "bigidea" ? "Big Idea" : feature === "analyze" ? "설교 분석" : feature}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ━━ 매출·결제 탭 ━━ */}
+      {tab === "revenue" && (
+        <>
+          {/* 매출 요약 */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-white rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-mid-gray">총 매출</p>
+              <p className="text-2xl font-bold text-gold">₩{(stats.totalRevenue || 0).toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 shadow-sm">
+              <p className="text-xs text-mid-gray">결제 건수</p>
+              <p className="text-2xl font-bold text-green">{stats.totalPaidOrders || 0}건</p>
+            </div>
+          </div>
+
+          {/* 월별 매출 차트 */}
+          {stats.monthlyRevenue && stats.monthlyRevenue.length > 0 && (
+            <div className="bg-white rounded-xl p-5 shadow-sm mb-5">
+              <h3 className="font-bold text-charcoal mb-4">월별 매출</h3>
+              <div className="flex items-end gap-2 h-40">
+                {(() => {
+                  const maxAmount = Math.max(...stats.monthlyRevenue.map(m => m.amount), 1);
+                  return stats.monthlyRevenue.map((m) => {
+                    const height = m.amount > 0 ? Math.max((m.amount / maxAmount) * 100, 8) : 4;
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-[10px] text-charcoal font-medium">
+                          {m.amount > 0 ? `₩${(m.amount / 1000).toFixed(0)}K` : ""}
+                        </span>
+                        <div
+                          className={`w-full rounded-t-lg transition-all ${m.amount > 0 ? "bg-gold" : "bg-light-gray"}`}
+                          style={{ height: `${height}%` }}
+                        />
+                        <span className="text-[10px] text-mid-gray">{m.month.split("-")[1]}월</span>
+                        {m.count > 0 && <span className="text-[10px] text-mid-gray">{m.count}건</span>}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* 최근 결제 내역 */}
+          <div className="bg-white rounded-xl shadow-sm">
+            <div className="px-4 py-3 border-b border-light-gray/50">
+              <h3 className="font-bold text-charcoal text-sm">최근 결제 내역</h3>
+            </div>
+            {(stats.recentPayments || []).length === 0 ? (
+              <p className="text-center text-mid-gray text-sm py-8">결제 내역이 없습니다.</p>
+            ) : (
+              <div className="divide-y divide-light-gray/50">
+                {(stats.recentPayments || []).map((p) => {
+                  const statusMap: Record<string, { label: string; color: string }> = {
+                    paid: { label: "완료", color: "bg-green/20 text-green" },
+                    pending: { label: "대기", color: "bg-yellow-100 text-yellow-700" },
+                    failed: { label: "실패", color: "bg-red-100 text-red-600" },
+                    cancelled: { label: "취소", color: "bg-gray-100 text-gray-600" },
+                    refunded: { label: "환불", color: "bg-blue-100 text-blue-600" },
+                  };
+                  const s = statusMap[p.status] || { label: p.status, color: "bg-gray-100 text-gray-600" };
+                  const tierLabel = TIER_LABELS[p.tier]?.label || p.tier;
+                  return (
+                    <div key={p.id} className="px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-charcoal">{tierLabel}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${s.color}`}>{s.label}</span>
+                        </div>
+                        <p className="text-xs text-mid-gray mt-0.5">
+                          {new Date(p.paid_at || p.created_at).toLocaleDateString("ko-KR")}
+                          {p.method && ` · ${p.method}`}
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold text-charcoal">₩{p.amount.toLocaleString()}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>
       )}
