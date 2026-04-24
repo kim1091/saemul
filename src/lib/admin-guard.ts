@@ -3,10 +3,20 @@ import { redirect } from "next/navigation";
 
 /**
  * 관리자 모드 접근 권한 확인 + 미인가 시 리다이렉트
- * 목회자(churches.pastor_id) 또는 파트너(church_members.is_partner) 만 통과
- * 반환: { userId, role, churchId }
+ *
+ * 반환 역할:
+ * - "senior_pastor": 담임목사 (churches.pastor_id) → 모든 메뉴
+ * - "associate_pastor": 부교역자 (role=pastor, 담임 아님) → 재정 제외
+ * - "partner": 파트너/재정관리자 (is_partner=true) → 재정만
+ * - "admin": 플랫폼 관리자 → 모든 메뉴
  */
-export async function requireAdminAccess() {
+export type AdminRole = "senior_pastor" | "associate_pastor" | "partner" | "admin";
+
+export async function requireAdminAccess(): Promise<{
+  userId: string;
+  role: AdminRole;
+  churchId: string;
+}> {
   const supabase = await createServerSupabaseClient();
 
   const {
@@ -19,7 +29,7 @@ export async function requireAdminAccess() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, church_id")
+    .select("role, church_id, is_admin")
     .eq("id", user.id)
     .single();
 
@@ -27,12 +37,26 @@ export async function requireAdminAccess() {
     redirect("/home");
   }
 
-  // 1차: 목회자 역할 확인
-  if (profile.role === "pastor" || profile.role === "admin") {
-    return { userId: user.id, role: profile.role, churchId: profile.church_id };
+  // 플랫폼 관리자
+  if (profile.is_admin) {
+    return { userId: user.id, role: "admin", churchId: profile.church_id };
   }
 
-  // 2차: 파트너 여부 확인 (is_partner 컬럼 미존재 시 안전하게 스킵)
+  // 목회자 역할 → 담임 vs 부교역자 구분
+  if (profile.role === "pastor") {
+    const { data: church } = await supabase
+      .from("churches")
+      .select("pastor_id")
+      .eq("id", profile.church_id)
+      .single();
+
+    if (church?.pastor_id === user.id) {
+      return { userId: user.id, role: "senior_pastor", churchId: profile.church_id };
+    }
+    return { userId: user.id, role: "associate_pastor", churchId: profile.church_id };
+  }
+
+  // 파트너 여부 확인
   try {
     const { data: partner } = await supabase
       .from("church_members")
@@ -44,12 +68,21 @@ export async function requireAdminAccess() {
       .maybeSingle();
 
     if (partner) {
-      return { userId: user.id, role: "partner" as const, churchId: profile.church_id };
+      return { userId: user.id, role: "partner", churchId: profile.church_id };
     }
   } catch {
-    // is_partner 컬럼이 아직 없으면 파트너 기능 비활성 (목회자만 접근 가능)
+    // is_partner 컬럼 미존재 시 안전하게 스킵
   }
 
-  // 권한 없음 → 홈으로
   redirect("/home");
+}
+
+/** 재정 관련 페이지 접근 가능 여부 */
+export function canAccessFinance(role: AdminRole): boolean {
+  return role === "senior_pastor" || role === "admin" || role === "partner";
+}
+
+/** 재정 외 관리 페이지 접근 가능 여부 */
+export function canAccessNonFinance(role: AdminRole): boolean {
+  return role !== "partner";
 }
