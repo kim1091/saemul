@@ -89,25 +89,31 @@ export default function SermonListPage() {
         </div>
       )}
 
-      {/* 탭: 내 설교 / 목회자 설교 */}
-      <div className="flex bg-white rounded-xl p-1 mb-4 shadow-sm">
-        <button
-          onClick={() => setTab("mine")}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === "mine" ? "bg-green text-white" : "text-mid-gray"
-          }`}
-        >
-          내 설교
-        </button>
-        <button
-          onClick={() => setTab("pastor")}
-          className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
-            tab === "pastor" ? "bg-green text-white" : "text-mid-gray"
-          }`}
-        >
-          목회자 설교
-        </button>
-      </div>
+      {/* 탭: 내 설교 / 목회자 설교 (목회자만 표시) */}
+      {isPastor ? (
+        <div className="flex bg-white rounded-xl p-1 mb-4 shadow-sm">
+          <button
+            onClick={() => setTab("mine")}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+              tab === "mine" ? "bg-green text-white" : "text-mid-gray"
+            }`}
+          >
+            내 설교
+          </button>
+          <button
+            onClick={() => setTab("pastor")}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+              tab === "pastor" ? "bg-green text-white" : "text-mid-gray"
+            }`}
+          >
+            목회자 설교
+          </button>
+        </div>
+      ) : (
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-mid-gray">내 설교 목록</h3>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center pt-12">

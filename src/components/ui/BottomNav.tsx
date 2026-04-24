@@ -13,16 +13,16 @@ const memberTabs: NavItem[] = [
   { href: "/home", label: "홈", icon: "🏠" },
   { href: "/qt", label: "큐티", icon: "📖" },
   { href: "/ask", label: "질문", icon: "💬" },
-  { href: "/group", label: "소그룹", icon: "👥" },
   { href: "/sermon", label: "설교", icon: "🎤" },
+  { href: "/profile", label: "MY", icon: "👤" },
 ];
 
 const pastorTabs: NavItem[] = [
   { href: "/home", label: "홈", icon: "🏠" },
   { href: "/qt", label: "큐티", icon: "📖" },
   { href: "/sermon", label: "설교", icon: "🎤" },
-  { href: "/group", label: "소그룹", icon: "👥" },
   { href: "/admin", label: "관리", icon: "⚙️" },
+  { href: "/profile", label: "MY", icon: "👤" },
 ];
 
 export default function BottomNav({ role = "member" }: { role?: string }) {
