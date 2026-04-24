@@ -133,7 +133,7 @@ export default function PaymentPage() {
       <h1 className="text-xl font-bold text-green-dark mb-1">요금제 선택</h1>
       <p className="text-sm text-mid-gray mb-6">
         현재: <span className="font-medium text-charcoal">
-          {currentTier === "free" ? "무료" : currentTier.replace("_", " ").toUpperCase()}
+          {({ free: "무료", premium: "Premium", premium_plus: "Premium+", pastor: "Pastor", church: "Church" })[currentTier] || currentTier}
         </span>
       </p>
 
