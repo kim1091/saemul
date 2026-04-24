@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient, createServiceRoleClient } from "@/lib/supabase-server";
-import { canAccessWorkshop, getMonthlySermonLimit } from "@/lib/sermon-guard";
+import { canAccessWorkshop, getMonthlySermonLimit, getEffectiveTier } from "@/lib/sermon-guard";
 
 // ═══ 웹 검색 (Tavily) ═══
 async function searchIllustrations(passage: string, memo: string): Promise<string> {
@@ -179,10 +179,11 @@ function detectFromMemo(memo: string) {
   return { worship, season };
 }
 
-function isPaid(profile: { role?: string; subscription_tier?: string; is_admin?: boolean }): boolean {
+function isPaid(profile: { role?: string; subscription_tier?: string; subscription_expires_at?: string | null; is_admin?: boolean }): boolean {
   if (profile.is_admin) return true;
   if (profile.role === 'pastor') return true;
-  return profile.subscription_tier !== 'free' && !!profile.subscription_tier;
+  const tier = getEffectiveTier(profile);
+  return tier !== 'free' && !!tier;
 }
 
 // ── 설교공방 스타일 프롬프트 빌더 ──
@@ -311,7 +312,7 @@ async function handleQuickSermon(
   // 티어별 월간 설교 한도 체크
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, subscription_tier, is_admin")
+    .select("role, subscription_tier, subscription_expires_at, is_admin")
     .eq("id", userId)
     .single();
 
@@ -402,7 +403,7 @@ async function handleWorkshopSermon(
   // 프로필 조회
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, subscription_tier, is_admin, trial_count")
+    .select("role, subscription_tier, subscription_expires_at, is_admin, trial_count")
     .eq("id", userId)
     .single();
 

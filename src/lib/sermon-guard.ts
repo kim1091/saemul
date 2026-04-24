@@ -12,14 +12,30 @@
 interface ProfileForGuard {
   role?: string;
   subscription_tier?: string;
+  subscription_expires_at?: string | null;
   is_admin?: boolean;
+}
+
+/** 구독 만료 여부를 반영한 실제 티어 반환. 만료됐으면 "free" */
+export function getEffectiveTier(profile: ProfileForGuard): string {
+  const tier = profile.subscription_tier || "free";
+  if (tier === "free" || profile.is_admin) return tier;
+
+  // 만료일 미설정 = 수동 승인 (관리자가 직접 올린 경우) → 유효
+  if (!profile.subscription_expires_at) return tier;
+
+  const expires = new Date(profile.subscription_expires_at);
+  if (expires < new Date()) return "free";
+
+  return tier;
 }
 
 /** 설교공방·BigIdea·Analyze 접근 가능 여부 (담임목사/부목사/전도사) */
 export function canAccessWorkshop(profile: ProfileForGuard): boolean {
   if (profile.is_admin) return true;
   if (profile.role === "pastor") return true;
-  if (profile.subscription_tier === "pastor" || profile.subscription_tier === "church") return true;
+  const tier = getEffectiveTier(profile);
+  if (tier === "pastor" || tier === "church") return true;
   return false;
 }
 
@@ -27,7 +43,8 @@ export function canAccessWorkshop(profile: ProfileForGuard): boolean {
 export function getMonthlySermonLimit(profile: ProfileForGuard): number {
   if (profile.is_admin) return -1;
   if (profile.role === "pastor") return -1;
-  switch (profile.subscription_tier) {
+  const tier = getEffectiveTier(profile);
+  switch (tier) {
     case "church":
     case "pastor":
       return -1;
@@ -44,7 +61,8 @@ export function getMonthlySermonLimit(profile: ProfileForGuard): number {
 export function getMonthlyAskLimit(profile: ProfileForGuard): number {
   if (profile.is_admin) return -1;
   if (profile.role === "pastor") return -1;
-  switch (profile.subscription_tier) {
+  const tier = getEffectiveTier(profile);
+  switch (tier) {
     case "church":
     case "pastor":
       return -1;

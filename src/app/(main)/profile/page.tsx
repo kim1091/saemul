@@ -12,6 +12,7 @@ interface Profile {
   name: string | null;
   role: Role;
   subscription_tier: Tier;
+  subscription_expires_at: string | null;
   qt_streak: number;
   qt_total_days: number;
   church_name: string | null;
@@ -36,7 +37,7 @@ export default function ProfilePage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("name, role, subscription_tier, qt_streak, qt_total_days, church_name")
+      .select("name, role, subscription_tier, subscription_expires_at, qt_streak, qt_total_days, church_name")
       .eq("id", user.id)
       .single();
 
@@ -113,29 +114,51 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {(profile.subscription_tier === "free" || profile.subscription_tier === "premium") && (
+      {profile.subscription_tier !== "church" && (
         <div className="bg-green-dark text-white rounded-2xl p-5 mb-4">
           {profile.subscription_tier === "free" ? (
             <>
               <h3 className="font-bold mb-1">Premium으로 업그레이드</h3>
               <p className="text-light-gray text-sm mb-3">
-                5분 설교 월 4회, AI 질문 월 30회, 소그룹 생성
+                5분 설교, AI 질문, 소그룹 등 다양한 기능을 이용하세요
               </p>
-              <button className="px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm">
-                월 4,900원으로 시작
-              </button>
             </>
           ) : (
             <>
-              <h3 className="font-bold mb-1">Premium+로 업그레이드</h3>
+              <h3 className="font-bold mb-1">더 높은 요금제로 업그레이드</h3>
               <p className="text-light-gray text-sm mb-3">
-                5분 설교 월 10회, AI 질문 무제한
+                더 많은 기능과 무제한 이용을 경험하세요
               </p>
-              <button className="px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm">
-                월 9,900원으로 업그레이드
-              </button>
+              {profile.subscription_expires_at && (
+                <p className="text-light-gray/80 text-xs mb-3">
+                  현재 구독 만료: {new Date(profile.subscription_expires_at).toLocaleDateString("ko-KR")}
+                </p>
+              )}
             </>
           )}
+          <Link
+            href="/payment"
+            className="inline-block px-5 py-2 bg-gold text-charcoal font-bold rounded-lg text-sm"
+          >
+            {profile.subscription_tier === "free" ? "요금제 보기" : "업그레이드"}
+          </Link>
+        </div>
+      )}
+
+      {profile.subscription_tier !== "free" && profile.subscription_expires_at && (
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-mid-gray">구독 만료일</p>
+            <p className="text-sm font-medium text-charcoal">
+              {new Date(profile.subscription_expires_at).toLocaleDateString("ko-KR")}
+            </p>
+          </div>
+          <Link
+            href="/payment"
+            className="text-xs text-green font-medium"
+          >
+            연장하기 →
+          </Link>
         </div>
       )}
 

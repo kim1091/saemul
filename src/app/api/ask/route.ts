@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     // 프로필 조회 → 티어별 쿼터 분기
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, subscription_tier, is_admin")
+      .select("role, subscription_tier, subscription_expires_at, is_admin")
       .eq("id", user.id)
       .single();
 

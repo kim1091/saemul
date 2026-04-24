@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { MONTHLY_BIGIDEA_LIMIT } from "@/lib/sermon-guard";
+import { MONTHLY_BIGIDEA_LIMIT, getEffectiveTier } from "@/lib/sermon-guard";
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     // 유료 확인
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, subscription_tier, is_admin")
+      .select("role, subscription_tier, subscription_expires_at, is_admin")
       .eq("id", user.id)
       .single();
 
@@ -23,8 +23,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "프로필을 찾을 수 없습니다." }, { status: 403 });
     }
 
-    // Free 사용자 차단
-    const tier = profile.subscription_tier || "free";
+    // Free 사용자 차단 (만료 체크 포함)
+    const tier = getEffectiveTier(profile);
     if (tier === "free" && !profile.is_admin && profile.role !== "pastor") {
       return NextResponse.json(
         { error: "Big Idea 분석은 Premium 플랜부터 이용 가능합니다." },
