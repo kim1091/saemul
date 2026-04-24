@@ -15,6 +15,7 @@ interface ChurchMember {
   grade: string | null;
   profile_id: string | null;
   registered_by: string | null;
+  household_head_id: string | null;
   is_active: boolean;
   is_partner: boolean;
 }
@@ -32,7 +33,7 @@ export default function MembersPage() {
 
   // 교인 추가 폼
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "본인" });
+  const [form, setForm] = useState({ name: "", birth_date: "", gender: "", phone: "", relation: "본인", household_head_id: "" });
 
   // 수정 모드
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export default function MembersPage() {
     // is_partner 컬럼 존재 여부에 따라 안전하게 쿼리
     const { data, error: queryErr } = await supabase
       .from("church_members")
-      .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, is_active, is_partner")
+      .select("id, name, birth_date, gender, phone, relation, department, grade, profile_id, registered_by, household_head_id, is_active, is_partner")
       .eq("church_id", profile.church_id)
       .eq("is_active", true)
       .order("department")
@@ -79,7 +80,7 @@ export default function MembersPage() {
         .eq("is_active", true)
         .order("department")
         .order("name");
-      setMembers((fallback || []).map(m => ({ ...m, is_partner: false })));
+      setMembers((fallback || []).map(m => ({ ...m, is_partner: false, household_head_id: null })));
     } else {
       setMembers(data || []);
     }
@@ -88,7 +89,7 @@ export default function MembersPage() {
 
   async function handleAddMember() {
     if (!form.name.trim() || !churchId || !pastorId) return;
-    const { error } = await supabase.from("church_members").insert({
+    const insertData: Record<string, unknown> = {
       church_id: churchId,
       registered_by: pastorId,
       name: form.name.trim(),
@@ -96,9 +97,18 @@ export default function MembersPage() {
       gender: form.gender || null,
       phone: form.phone || null,
       relation: form.relation,
-    });
+    };
+    // 가족 구성원이면 세대주 연결
+    if (form.relation !== "본인" && form.household_head_id) {
+      insertData.household_head_id = form.household_head_id;
+    }
+    const { data: newMember, error } = await supabase.from("church_members").insert(insertData).select("id").single();
     if (error) { alert("추가 실패: " + error.message); return; }
-    setForm({ name: "", birth_date: "", gender: "", phone: "", relation: "본인" });
+    // 세대주(본인)면 자기 자신을 household_head_id로
+    if (form.relation === "본인" && newMember) {
+      await supabase.from("church_members").update({ household_head_id: newMember.id }).eq("id", newMember.id);
+    }
+    setForm({ name: "", birth_date: "", gender: "", phone: "", relation: "본인", household_head_id: "" });
     setShowForm(false);
     loadData();
   }
@@ -182,22 +192,24 @@ export default function MembersPage() {
   // 그룹핑: 부서별 또는 가족별
   const grouped: Record<string, ChurchMember[]> = {};
   if (deptFilter === "가족별") {
-    // registered_by 기준으로 가족 묶기
+    // household_head_id 기준으로 가족 묶기 (없으면 registered_by 폴백)
+    const familyMap: Record<string, ChurchMember[]> = {};
     filtered.forEach((m) => {
-      const head = m.relation === "본인" ? m.name : null;
-      const key = m.registered_by || m.id;
-      if (!grouped[key]) grouped[key] = [];
-      grouped[key].push(m);
+      const key = m.household_head_id || m.registered_by || m.id;
+      if (!familyMap[key]) familyMap[key] = [];
+      familyMap[key].push(m);
     });
-    // 그룹 키를 "본인" 이름으로 변환
-    const renamed: Record<string, ChurchMember[]> = {};
-    Object.values(grouped).forEach((family) => {
+    // 그룹 키를 세대주 이름으로 변환, 세대주를 첫번째로 정렬
+    Object.values(familyMap).forEach((family) => {
+      family.sort((a, b) => {
+        if (a.relation === "본인") return -1;
+        if (b.relation === "본인") return 1;
+        return 0;
+      });
       const head = family.find((m) => m.relation === "본인");
       const label = (head?.name || family[0]?.name || "미분류") + " 가족";
-      renamed[label] = family;
+      grouped[label] = family;
     });
-    Object.keys(grouped).forEach((k) => delete grouped[k]);
-    Object.assign(grouped, renamed);
   } else {
     filtered.forEach((m) => {
       const dept = m.department || "미분류";
@@ -260,6 +272,19 @@ export default function MembersPage() {
               <option>형제/자매</option>
             </select>
           </div>
+          {form.relation !== "본인" && (
+            <div>
+              <label className="text-xs text-mid-gray block mb-1">세대주 연결</label>
+              <select value={form.household_head_id}
+                onChange={(e) => setForm({ ...form, household_head_id: e.target.value })}
+                className="w-full px-3 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green">
+                <option value="">세대주 선택 (선택사항)</option>
+                {members.filter(m => m.relation === "본인").map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button onClick={handleAddMember} disabled={!form.name.trim()}
             className="w-full py-2.5 bg-green text-white rounded-lg font-medium text-sm disabled:opacity-40">
             추가
@@ -276,7 +301,7 @@ export default function MembersPage() {
               deptFilter === d ? "bg-green text-white" : "bg-white text-mid-gray border border-light-gray"
             }`}
           >
-            {d} {d === "전체" ? members.length : d === "가족별" ? new Set(members.map(m => m.registered_by || m.id)).size : (deptCounts[d] || 0)}
+            {d} {d === "전체" ? members.length : d === "가족별" ? new Set(members.map(m => m.household_head_id || m.registered_by || m.id)).size : (deptCounts[d] || 0)}
           </button>
         ))}
       </div>
@@ -338,6 +363,9 @@ export default function MembersPage() {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-medium text-sm text-charcoal">{m.name}</span>
                             {m.grade && <span className="text-[10px] px-1.5 py-0.5 bg-gold/20 text-gold rounded-full">{m.grade}</span>}
+                            {m.relation === "본인" && m.household_head_id === m.id && deptFilter === "가족별" && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-green-dark/10 text-green-dark rounded-full font-bold">세대주</span>
+                            )}
                             {m.relation && m.relation !== "본인" && (
                               <span className="text-[10px] px-1.5 py-0.5 bg-cream text-mid-gray rounded-full">{m.relation}</span>
                             )}

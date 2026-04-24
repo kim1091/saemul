@@ -63,8 +63,14 @@ export default function OnboardingPage() {
   const [registrationDate, setRegistrationDate] = useState("");
   const [district, setDistrict] = useState("");
 
-  // Step 5: 가족
+  // Step 5: 가족 + 세대주
   const [family, setFamily] = useState<Family[]>([]);
+  const [isHouseholdHead, setIsHouseholdHead] = useState<boolean | null>(null);
+  const [headSearch, setHeadSearch] = useState("");
+  const [headResults, setHeadResults] = useState<{ id: string; name: string; phone: string | null; department: string | null }[]>([]);
+  const [selectedHeadId, setSelectedHeadId] = useState<string | null>(null);
+  const [selectedHeadName, setSelectedHeadName] = useState("");
+  const [familyRelation, setFamilyRelation] = useState("배우자");
 
   useEffect(() => {
     loadExisting();
@@ -103,6 +109,15 @@ export default function OnboardingPage() {
 
   function removeFamily(i: number) {
     setFamily(family.filter((_, idx) => idx !== i));
+  }
+
+  async function searchHouseholdHeads() {
+    if (!selectedChurchId || selectedChurchId === "skip") return;
+    const res = await fetch(`/api/church/household-heads?churchId=${selectedChurchId}&q=${encodeURIComponent(headSearch)}`);
+    if (res.ok) {
+      const data = await res.json();
+      setHeadResults(data);
+    }
   }
 
   function canProceed(): boolean {
@@ -184,7 +199,14 @@ export default function OnboardingPage() {
 
       // 교회 가입 신청 (교회를 선택한 경우만)
       if (selectedChurchId && selectedChurchId !== "skip") {
-        const snapshot = { name, phone, rank, services, baptism_date: baptismDate, registration_date: registrationDate };
+        const snapshot = {
+          name, phone, rank, services,
+          baptism_date: baptismDate, registration_date: registrationDate,
+          is_household_head: isHouseholdHead ?? true,
+          household_head_id: selectedHeadId || null,
+          household_head_name: selectedHeadName || null,
+          family_relation: isHouseholdHead === false ? familyRelation : null,
+        };
 
         const { error: jrErr } = await supabase.from("join_requests").insert({
           church_id: selectedChurchId,
@@ -442,38 +464,141 @@ export default function OnboardingPage() {
         </div>
       )}
 
-      {/* Step 5: 가족 */}
+      {/* Step 5: 세대주 + 가족 */}
       {step === 5 && (
         <div>
-          <h2 className="text-lg font-bold text-charcoal mb-2">가족 사항</h2>
-          <p className="text-mid-gray text-sm mb-4">가족 정보는 선택 입력입니다</p>
+          <h2 className="text-lg font-bold text-charcoal mb-2">가족 · 세대주 연결</h2>
+          <p className="text-mid-gray text-sm mb-5">
+            같은 교회 가족끼리 자동으로 묶입니다
+          </p>
 
-          {family.map((f, i) => (
-            <div key={i} className="bg-white rounded-xl p-4 shadow-sm mb-3 space-y-2">
-              <div className="flex gap-2">
-                <select value={f.relation}
-                  onChange={(e) => updateFamily(i, "relation", e.target.value)}
-                  className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
-                >
-                  {RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-                <input type="text" placeholder="이름"
-                  value={f.name}
-                  onChange={(e) => updateFamily(i, "name", e.target.value)}
-                  className="flex-1 px-4 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
-                <button onClick={() => removeFamily(i)} className="text-xs text-mid-gray px-2">삭제</button>
-              </div>
-              <input type="date" value={f.birth_date}
-                onChange={(e) => updateFamily(i, "birth_date", e.target.value)}
-                className="w-full px-4 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+          {/* 세대주 여부 선택 */}
+          <div className="mb-5">
+            <label className="text-sm font-bold text-charcoal block mb-2">세대주(신앙의 가장)이신가요?</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setIsHouseholdHead(true); setSelectedHeadId(null); setSelectedHeadName(""); }}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium border-2 transition ${
+                  isHouseholdHead === true ? "border-green bg-green/5 text-green-dark" : "border-light-gray bg-white text-charcoal"
+                }`}
+              >
+                네, 세대주입니다
+              </button>
+              <button
+                onClick={() => { setIsHouseholdHead(false); }}
+                className={`flex-1 py-3 rounded-xl text-sm font-medium border-2 transition ${
+                  isHouseholdHead === false ? "border-green bg-green/5 text-green-dark" : "border-light-gray bg-white text-charcoal"
+                }`}
+              >
+                아니요, 가족입니다
+              </button>
             </div>
-          ))}
+          </div>
 
-          <button onClick={addFamily}
-            className="w-full py-2.5 bg-white border-2 border-dashed border-light-gray rounded-xl text-sm text-mid-gray"
-          >
-            + 가족 추가
-          </button>
+          {/* 세대주인 경우: 가족 구성원 추가 */}
+          {isHouseholdHead === true && (
+            <div>
+              <div className="bg-green/5 rounded-xl p-3 mb-4">
+                <p className="text-sm text-green-dark">✓ 세대주로 등록됩니다. 가족 구성원을 추가할 수 있어요.</p>
+              </div>
+
+              {family.map((f, i) => (
+                <div key={i} className="bg-white rounded-xl p-4 shadow-sm mb-3 space-y-2">
+                  <div className="flex gap-2">
+                    <select value={f.relation}
+                      onChange={(e) => updateFamily(i, "relation", e.target.value)}
+                      className="px-3 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+                    >
+                      {RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <input type="text" placeholder="이름"
+                      value={f.name}
+                      onChange={(e) => updateFamily(i, "name", e.target.value)}
+                      className="flex-1 px-4 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                    <button onClick={() => removeFamily(i)} className="text-xs text-mid-gray px-2">삭제</button>
+                  </div>
+                  <input type="date" value={f.birth_date}
+                    onChange={(e) => updateFamily(i, "birth_date", e.target.value)}
+                    className="w-full px-4 py-2 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green" />
+                </div>
+              ))}
+
+              <button onClick={addFamily}
+                className="w-full py-2.5 bg-white border-2 border-dashed border-light-gray rounded-xl text-sm text-mid-gray"
+              >
+                + 가족 추가
+              </button>
+            </div>
+          )}
+
+          {/* 가족 구성원인 경우: 세대주 검색 */}
+          {isHouseholdHead === false && selectedChurchId && selectedChurchId !== "skip" && (
+            <div>
+              <div className="bg-gold/10 rounded-xl p-3 mb-4">
+                <p className="text-sm text-charcoal">세대주 이름을 검색하여 가족으로 연결하세요.</p>
+              </div>
+
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text" value={headSearch}
+                  onChange={(e) => setHeadSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && searchHouseholdHeads()}
+                  placeholder="세대주 이름 검색"
+                  className="flex-1 px-4 py-2.5 bg-cream border border-light-gray rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green"
+                />
+                <button onClick={searchHouseholdHeads} className="px-4 py-2.5 bg-green text-white rounded-lg text-sm font-medium">검색</button>
+              </div>
+
+              {headResults.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {headResults.map((h) => (
+                    <button key={h.id}
+                      onClick={() => { setSelectedHeadId(h.id); setSelectedHeadName(h.name); }}
+                      className={`w-full text-left p-3 rounded-xl border-2 transition ${
+                        selectedHeadId === h.id ? "border-green bg-green/5" : "border-light-gray bg-white"
+                      }`}
+                    >
+                      <p className="font-medium text-charcoal text-sm">{h.name}</p>
+                      <p className="text-xs text-mid-gray">
+                        {[h.department, h.phone].filter(Boolean).join(" · ") || ""}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {headSearch.trim() && headResults.length === 0 && (
+                <p className="text-xs text-mid-gray text-center mb-4">검색 결과가 없습니다. 세대주가 먼저 가입해야 합니다.</p>
+              )}
+
+              {selectedHeadId && (
+                <div>
+                  <div className="bg-green/5 rounded-xl p-3 mb-3">
+                    <p className="text-sm text-green-dark">
+                      ✓ <span className="font-bold">{selectedHeadName}</span>님의 가족으로 연결됩니다
+                    </p>
+                  </div>
+                  <label className="text-sm font-bold text-charcoal block mb-2">세대주와의 관계</label>
+                  <div className="flex flex-wrap gap-2">
+                    {RELATIONS.map(r => (
+                      <button key={r}
+                        onClick={() => setFamilyRelation(r)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium border ${
+                          familyRelation === r ? "bg-green text-white border-green" : "bg-white text-charcoal border-light-gray"
+                        }`}
+                      >{r}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isHouseholdHead === false && (!selectedChurchId || selectedChurchId === "skip") && (
+            <div className="bg-cream rounded-xl p-3">
+              <p className="text-sm text-mid-gray">교회를 선택한 경우에만 세대주 검색이 가능합니다.</p>
+            </div>
+          )}
 
           <div className="bg-gold/10 rounded-xl p-4 mt-6">
             <p className="text-sm text-charcoal">

@@ -14,6 +14,10 @@ interface JoinRequestDetail {
   snapshot?: {
     name?: string; phone?: string; rank?: string; services?: string[];
     baptism_date?: string; registration_date?: string;
+    is_household_head?: boolean;
+    household_head_id?: string;
+    household_head_name?: string;
+    family_relation?: string;
   };
   profile: {
     name: string | null;
@@ -76,13 +80,64 @@ export default function JoinRequestsPage() {
     if (!churchId || !pastorId) return;
     if (!confirm(`${req.profile.name || "성도"}님의 가입을 승인하시겠습니까?`)) return;
 
+    // 1. 요청 승인
     await supabase.from("join_requests").update({
       status: "approved", responded_at: new Date().toISOString(), responded_by: pastorId,
     }).eq("id", req.id);
 
+    // 2. 프로필에 교회 연결
     await supabase.from("profiles").update({
       church_id: churchId, church_name: churchName,
     }).eq("id", req.user_id);
+
+    // 3. church_members 자동 생성 (중복 방지)
+    const { data: existing } = await supabase
+      .from("church_members")
+      .select("id")
+      .eq("church_id", churchId)
+      .eq("profile_id", req.user_id)
+      .maybeSingle();
+
+    if (!existing) {
+      const snap = req.snapshot as Record<string, unknown> | undefined;
+      const isHead = snap?.is_household_head !== false;
+      const relation = isHead ? "본인" : (snap?.family_relation as string || "배우자");
+
+      // 본인 교인 레코드 생성
+      const { data: newMember } = await supabase.from("church_members").insert({
+        church_id: churchId,
+        profile_id: req.user_id,
+        registered_by: req.user_id,
+        name: req.profile.name || "이름없음",
+        birth_date: req.profile.birth_date || null,
+        gender: req.profile.gender || null,
+        phone: req.profile.phone || null,
+        relation,
+        household_head_id: isHead ? undefined : (snap?.household_head_id as string || null),
+      }).select("id").single();
+
+      // 세대주면 자기 자신을 household_head_id로 설정
+      if (newMember && isHead) {
+        await supabase.from("church_members")
+          .update({ household_head_id: newMember.id })
+          .eq("id", newMember.id);
+      }
+
+      // 가족 구성원도 함께 등록 (온보딩에서 입력한 가족)
+      if (newMember && isHead && req.profile.family && req.profile.family.length > 0) {
+        for (const f of req.profile.family) {
+          if (!f.name) continue;
+          await supabase.from("church_members").insert({
+            church_id: churchId,
+            registered_by: req.user_id,
+            name: f.name,
+            birth_date: f.birth_date || null,
+            relation: f.relation || "자녀",
+            household_head_id: newMember.id,
+          });
+        }
+      }
+    }
 
     loadData();
   }
